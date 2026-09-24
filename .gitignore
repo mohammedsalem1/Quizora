@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+dist/
+out/
+build/
+
+# Env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+npm-debug.log*
+*.log
+
+# Testing / coverage
+coverage/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code runtime state
+.claude/scheduled_tasks.lock
+
+# Prisma
+apps/api/prisma/migrations/dev.db
+
+# TypeScript build info
+*.tsbuildinfo
