@@ -1,34 +1,48 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-// Small shared building blocks. Everything is at least 44px tall so it's easy to tap.
+// Small shared building blocks. Everything is at least 44px tall so it's easy to tap, and
+// buttons change colour when pressed (phones have no hover) without shifting the layout.
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "quiet";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-accent text-white hover:bg-accent-strong disabled:bg-accent/50",
+    "bg-accent text-white hover:bg-accent-strong active:bg-accent-deep disabled:bg-accent/50",
   secondary:
-    "border border-line bg-surface text-ink hover:bg-paper disabled:text-ink-muted",
+    "border border-line bg-surface text-ink hover:bg-paper active:bg-line/60 disabled:text-ink-muted",
   danger:
-    "border border-danger/30 bg-surface text-danger hover:bg-danger-soft disabled:opacity-60",
-  quiet: "text-ink-muted hover:bg-paper hover:text-ink disabled:opacity-60",
+    "border border-danger/30 bg-surface text-danger hover:bg-danger-soft active:bg-danger/15 disabled:opacity-60",
+  quiet:
+    "text-ink-muted hover:bg-paper hover:text-ink active:bg-line/60 disabled:opacity-60",
 };
 
+// "compact" keeps the 44px touch target but drops the side padding, for small text
+// buttons squeezed next to an input (e.g. "delete option").
+type ButtonSize = "md" | "compact";
+
 // Also used on <Link>s that should look like buttons.
-export function buttonClass(variant: ButtonVariant = "primary") {
-  return `inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-base font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]}`;
+export function buttonClass(
+  variant: ButtonVariant = "primary",
+  size: ButtonSize = "md",
+) {
+  const padding = size === "compact" ? "min-w-11 px-2" : "px-4";
+  return `inline-flex min-h-11 ${padding} cursor-pointer items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]}`;
 }
 
 export function Button({
   variant = "primary",
+  size = "md",
   className = "",
   type = "button",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}) {
   return (
     <button
       type={type}
-      className={`${buttonClass(variant)} ${className}`}
+      className={`${buttonClass(variant, size)} ${className}`}
       {...props}
     />
   );
@@ -36,6 +50,10 @@ export function Button({
 
 export const inputClass =
   "min-h-11 w-full rounded-lg border border-line bg-surface px-3 py-2 text-base text-ink placeholder:text-ink-muted/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-paper disabled:text-ink-muted aria-invalid:border-danger";
+
+// The id of a field's hint or error text. Give it to the input as aria-describedby so screen
+// readers announce the message with the field.
+export const messageId = (fieldId: string) => `${fieldId}-message`;
 
 export function Field({
   label,
@@ -57,9 +75,15 @@ export function Field({
       </label>
       {children}
       {error ? (
-        <p className="text-sm text-danger">{error}</p>
+        <p id={messageId(htmlFor)} className="text-sm text-danger">
+          {error}
+        </p>
       ) : (
-        hint && <p className="text-sm text-ink-muted">{hint}</p>
+        hint && (
+          <p id={messageId(htmlFor)} className="text-sm text-ink-muted">
+            {hint}
+          </p>
+        )
       )}
     </div>
   );
