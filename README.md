@@ -3,15 +3,15 @@
 A simple quiz platform for a tutoring centre: teachers create timed multiple-choice quizzes,
 students take them once within an open date range, and results are visible afterwards.
 
-> **Status:** database schema, migrations and sample data are in place (Phase 3).
-> Authentication, quiz creation, quiz taking and scoring are not implemented yet.
+> **Status:** database, sample data and API login with student/teacher roles are in place
+> (Phase 4). Quiz creation, quiz taking, scoring and the web UI are not implemented yet.
 
 ## Stack
 
 - **Frontend:** Next.js + TypeScript (`apps/web`)
 - **Backend:** NestJS + TypeScript (`apps/api`)
 - **Database:** PostgreSQL, via Prisma (`apps/api/prisma`)
-- **Auth:** JWT (not implemented yet)
+- **Auth:** JWT (`POST /auth/login`, `GET /auth/me`)
 - **Tests:** Jest + Supertest
 - **Local dev:** Docker Compose (Postgres)
 
@@ -29,7 +29,15 @@ students take them once within an open date range, and results are visible after
    - Frontend: `npm run dev:web`
    - Backend: `npm run dev:api`
 
-_TBD in a later phase: a single one-command startup. Logging in isn't implemented yet._
+_TBD in a later phase: a single one-command startup and a login page in the web app._
+
+## Tests
+
+- Unit tests: `npm run test:api`
+- API end-to-end tests: `npm run test:api:e2e`. These need Postgres running. They use a
+  separate database (`TEST_DATABASE_URL` in `apps/api/.env`, created and migrated
+  automatically) and **delete all data in it**, so they refuse to run unless its name ends
+  in `_test`.
 
 ## Repository structure
 

@@ -68,3 +68,24 @@ Honest account of how AI tools were used on this project. Updated as work progre
   was changed to `RESTRICT` before the migration was applied. The generated Prisma client
   also failed to load under `ts-node` at first; it was fixed with a generator option rather
   than a workaround in the seed.
+
+## Phase 4 — Authentication & roles
+
+- The AI wrote the auth module (login, JWT, the two global guards, decorators, input
+  validation), the Prisma service, the e2e test setup and the auth tests. Before writing
+  code, it stated its plan, assumptions and risks (token lifetime, no sign-up, login page
+  deferred to Phase 7).
+- How it was checked:
+  - 25 API end-to-end tests against a real test database. They cover login, malformed input,
+    a client-sent role, missing/garbage/forged/tampered/unsigned/expired tokens, a deleted
+    account, and role checks in both directions.
+  - To confirm the tests would actually catch regressions, two protections were removed on
+    purpose, one at a time: without the role guard, 3 tests failed; with unknown fields
+    allowed, 1 test failed. Both were then restored.
+  - It was confirmed that the tests refuse to run against the development database, and that
+    the development data was untouched afterwards.
+  - The login endpoints were also checked by hand with `curl` against the seeded dev accounts.
+- What went wrong along the way: the AI first installed `@nestjs/jwt`/`@nestjs/config` v12.
+  The app built and ran, but the tests failed because those versions are ESM-only and meant
+  for NestJS 12. The AI switched to the NestJS 11 versions instead of working around the
+  problem in Jest.
