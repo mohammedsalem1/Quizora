@@ -223,3 +223,54 @@ All routes require the TEACHER role and act only on the caller's own quizzes.
 
 - Deleting a quiz, unpublishing, and reordering questions. The brief doesn't ask for them.
   Each would be a small addition.
+
+## Between Phases 5 and 6 — Web frontend for the current API
+
+Built before Phase 6 at the user's request, so everything the API supports can be tested
+end to end in a browser. It covers login and logout for both roles, routing by role, and full
+teacher quiz management. The student area is a welcome page until Phases 6–9 add its API.
+
+### Decisions
+
+- **The login token lives in an httpOnly cookie that page JavaScript can't read.**
+  - The browser only calls this app's own `/api/*` routes. `app/api/auth/login` logs in
+    through the API and sets the cookie, and `app/api/[...path]` forwards everything else to
+    the NestJS API with the token attached. The browser never sees the JWT, so an XSS bug
+    couldn't steal it.
+  - The API still does every authorization check; the forwarding route is only transport.
+  - No CORS is needed. The earlier "CORS in Phase 7" note in the Phase 4 section is dropped.
+  - CSRF: the cookie is `SameSite=Lax`, and requests that change data must be
+    `application/json`, which another site can't send without CORS approval.
+- **Who the user is gets decided on the server.** The `/teacher` and `/student` layouts ask
+  the API (`GET /auth/me`) and redirect before rendering. A student who opens `/teacher`
+  lands on `/student`. `proxy.ts` only sends visitors without a session cookie to
+  `/login?from=…`, and the return path only accepts same-site paths.
+- **The interface is in Arabic and right-to-left.** Quiz text, names and options use
+  `dir="auto"`, so an English quiz still reads correctly. Dates show Arabic month names in
+  the form used in Jordan (e.g. "8 تشرين الأول"), with Western digits.
+- **Teachers enter dates in their browser's local time**, and they're sent to the API with
+  an explicit timezone (ISO `…Z`), as the API requires.
+- **API errors are translated.** The API answers in English. `lib/messages.ts` maps its fixed
+  messages (publish problems, the lock, option rules…) to Arabic; anything unknown falls
+  back to an Arabic message for the HTTP status.
+- **The client mirrors the API's form rules** (for fast feedback). Each error appears at
+  its field and focus moves to the first invalid one. The API remains the authority.
+- **`API_URL` (server-only) replaces `NEXT_PUBLIC_API_URL`.** Only the Next.js server calls
+  the API, so the address never needs to reach the browser.
+- **Visual design:** one font family (IBM Plex Sans Arabic), cool paper-like neutrals and
+  one green accent. The recurring motif is the answer-sheet bubble: the logo, and option
+  letters أ ب ج د, with the correct one filled. Touch targets are at least 44px.
+
+### Built beyond the brief (and why)
+
+- **The login page arrived earlier than Phase 7**, as part of this frontend pass.
+
+### Known limitations
+
+- **Light theme only.**
+- **No automated frontend tests.** The brief prioritises backend tests, and every rule is
+  enforced (and tested) in the API. The UI was checked by driving a headless browser at a
+  375px phone viewport and reviewing screenshots of each screen, plus horizontal-overflow
+  and console-error checks.
+- **The first build needs internet access**, to download the font (`next/font` then
+  serves it from the app itself).

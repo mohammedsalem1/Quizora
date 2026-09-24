@@ -3,9 +3,9 @@
 A simple quiz platform for a tutoring centre: teachers create timed multiple-choice quizzes,
 students take them once within an open date range, and results are visible afterwards.
 
-> **Status:** database, sample data, API login with student/teacher roles, and the teacher
-> API for building quizzes are in place (Phase 5). Quiz taking, scoring and the web UI are
-> not implemented yet.
+> **Status:** database, sample data, login with student/teacher roles, and quiz building for
+> teachers work end to end, through the API and an Arabic, mobile-first web app (Phase 5).
+> Quiz taking and scoring for students are not implemented yet.
 
 ## Stack
 
@@ -26,11 +26,32 @@ students take them once within an open date range, and results are visible after
 4. Create the database tables: `npm run db:migrate`
 5. Load sample data: `npm run db:seed` — **this deletes all existing data first.** Every
    sample account uses the password `Quizora@2026` (e.g. `teacher.rana`, `s10a01`).
-6. Run the apps:
-   - Frontend: `npm run dev:web`
-   - Backend: `npm run dev:api`
+6. Run the apps (two terminals):
+   - Backend: `npm run dev:api` (http://localhost:3001)
+   - Frontend: `npm run dev:web`, then open **http://localhost:3000**
 
-_TBD in a later phase: a single one-command startup and a login page in the web app._
+The first `dev:web`/`build:web` downloads the Arabic font from Google Fonts, so it needs
+internet access once.
+
+_TBD in a later phase: a single one-command startup._
+
+## Trying it out
+
+Log in at http://localhost:3000 with a sample account (password `Quizora@2026` for all):
+
+| Account | Role | What you'll see |
+|---|---|---|
+| `teacher.rana` | Teacher | A published Arabic maths quiz for 10A and 10B |
+| `teacher.omar` | Teacher | A published English biology quiz for 11A |
+| `teacher.huda` | Teacher | A draft Arabic grammar quiz, not yet published |
+| `s10a01` … `s10a06`, `s10b01` …, `s11a01` … | Student | A welcome page (quiz taking comes in a later phase) |
+
+As a teacher: create a quiz (dates, time limit, negative marking, classes), add questions
+and tap the letter of the correct answer, then publish. Other teachers can't open your
+quizzes, and once a student starts a quiz its questions and scoring rules are locked.
+
+The browser only talks to the web app. The web app keeps the login token in an httpOnly
+cookie and forwards `/api/*` requests to the NestJS API, which does every check.
 
 ## Tests
 
@@ -44,7 +65,8 @@ _TBD in a later phase: a single one-command startup and a login page in the web 
 
 ```
 apps/
-  web/   Next.js frontend (own .env.example)
+  web/   Next.js frontend: pages in app/, /api/* route handlers that forward to the
+         API, proxy.ts (login redirect), shared UI in components/ (own .env.example)
   api/   NestJS backend + Prisma schema (own .env.example)
 docker-compose.yml   Local Postgres for development
 .env.example          Postgres credentials for docker-compose
