@@ -3,8 +3,9 @@
 A simple quiz platform for a tutoring centre: teachers create timed multiple-choice quizzes,
 students take them once within an open date range, and results are visible afterwards.
 
-> **Status:** database, sample data and API login with student/teacher roles are in place
-> (Phase 4). Quiz creation, quiz taking, scoring and the web UI are not implemented yet.
+> **Status:** database, sample data, API login with student/teacher roles, and the teacher
+> API for building quizzes are in place (Phase 5). Quiz taking, scoring and the web UI are
+> not implemented yet.
 
 ## Stack
 
