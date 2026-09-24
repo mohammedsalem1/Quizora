@@ -1,9 +1,9 @@
-import { Logo } from "@/components/ui";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/session";
 
-export default function Home() {
-  return (
-    <main className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center px-4">
-      <Logo />
-    </main>
-  );
+// Sends each user to their own area.
+export default async function Home() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  redirect(user.role === "TEACHER" ? "/teacher" : "/student");
 }
