@@ -122,3 +122,55 @@ the end of the init migration (listed at the top of the schema file).
 - **Local port clash (not committed, local only):** this machine also has a native
   PostgreSQL on 5432, so the local `.env` files point Docker Postgres at 5433 via
   `POSTGRES_PORT`. The committed defaults stay at 5432.
+
+## Phase 4 — Authentication & roles
+
+### Decisions
+
+- **Secure by default.** A global guard requires a valid token on every endpoint unless it is
+  explicitly marked `@Public()` (today: only `POST /auth/login` and the `GET /` health
+  check). A new endpoint can't be left unprotected by forgetting a decorator.
+- **The token only identifies the user.** Its payload is just the user id. The guard loads
+  the user from the database on every request, so the role always comes from the database. A
+  role claim inside a token is ignored, even if the token is correctly signed. Role changes
+  and deleted accounts take effect immediately. At ~300 users one extra lookup per request is
+  negligible.
+- **Roles are declared per endpoint** with `@Roles('TEACHER')` / `@Roles('STUDENT')`, checked
+  by a second global guard.
+- **Tokens last 12 hours, with no refresh tokens.** A student who logs in in the morning
+  isn't logged out mid-quiz. Logging out means the browser discards its token.
+- **Usernames are case-insensitive** (trimmed and lowercased at login), because phone
+  keyboards often capitalise the first letter. Stored usernames are lowercase.
+- **Login failures don't reveal which usernames exist.** A wrong password and an unknown
+  username get the same response, and an unknown username still runs a bcrypt comparison so
+  the timing is similar.
+- **Strict input validation everywhere.** A global validation pipe (registered in
+  `AppModule`, so tests get the same behaviour) rejects unknown fields with a 400. That
+  includes a client sending its own `role`.
+- **Package versions:** `@nestjs/jwt` 11 and `@nestjs/config` 4, the generation that matches
+  NestJS 11. The newer v12 packages are ESM-only (built for NestJS 12) and break under Jest.
+
+### Assumptions
+
+- **No self-registration.** The brief only says users log in, so accounts come from the seed
+  for now. Known limitation: Nour has no screen for managing accounts.
+
+### Testing approach
+
+- API end-to-end tests (Supertest) run against a separate database from `TEST_DATABASE_URL`.
+  Migrations are applied automatically. The tests delete all its data, so they refuse to run
+  unless the database name ends in `_test`, and they double-check with
+  `SELECT current_database()` before deleting anything.
+- Role checks are tested through a small controller defined only inside the test file,
+  because the real teacher/student endpoints arrive in Phase 5. Nothing test-only ships in
+  the app.
+- For Jest only, TypeScript compiles to plain CommonJS (`test/jest-e2e.json`). Prisma's
+  generated client loads its query engine with a dynamic `import()`, which Jest's module
+  runtime doesn't support without an experimental Node flag. The app's real build is
+  unchanged.
+
+### Deferred
+
+- **Throttling repeated login attempts** → Phase 12 (security review).
+- **Allowing the web app's origin (CORS)** → Phase 7, when the web app first calls the API.
+- **Login page** → Phase 7.

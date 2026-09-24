@@ -10,6 +10,7 @@
     "build:web": "npm run build --workspace apps/web",
     "build:api": "npm run build --workspace apps/api",
     "test:api": "npm run test --workspace apps/api",
+    "test:api:e2e": "npm run test:e2e --workspace apps/api",
     "db:migrate": "npm run db:migrate --workspace apps/api",
     "db:seed": "npm run db:seed --workspace apps/api"
   }
