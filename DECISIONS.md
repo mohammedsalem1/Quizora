@@ -16,7 +16,7 @@ progresses through each phase.
 
 - **Prisma 7.10.0, pinned.** npm's `latest` tag for `prisma` currently points at a
   prerelease (`8.0.0-rc.x`), so the version is pinned to the latest stable release. Prisma 7
-  moves the connection URL out of `schema.prisma` into `apps/api/prisma7.config.ts`, which
+  moves the connection URL out of `schema.prisma` into `apps/api/prisma.config.ts`, which
   reads `DATABASE_URL` from the environment.
 - **One `.env.example` per place that reads it.** The root one holds the Postgres credentials
   `docker-compose.yml` uses; `apps/api/.env.example` holds `DATABASE_URL`/`JWT_SECRET`/`API_PORT`;
