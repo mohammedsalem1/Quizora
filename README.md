@@ -3,9 +3,8 @@
 A simple quiz platform for a tutoring centre: teachers create timed multiple-choice quizzes,
 students take them once within an open date range, and results are visible afterwards.
 
-> **Status:** project foundation only (Phase 1). Authentication, quiz creation, the database
-> schema, and scoring are not implemented yet — this commit sets up the monorepo skeleton so
-> those can be built on top of it.
+> **Status:** database schema, migrations and sample data are in place (Phase 3).
+> Authentication, quiz creation, quiz taking and scoring are not implemented yet.
 
 ## Stack
 
@@ -22,13 +21,15 @@ students take them once within an open date range, and results are visible after
    needed — they default to matching values, so this works out of the box.
 2. Start Postgres: `docker compose up -d`
 3. Install dependencies: `npm install` (run once, from the repo root — npm workspaces install
-   both apps)
-4. Run the apps:
+   both apps; this also generates the Prisma client)
+4. Create the database tables: `npm run db:migrate`
+5. Load sample data: `npm run db:seed` — **this deletes all existing data first.** Every
+   sample account uses the password `Quizora@2026` (e.g. `teacher.rana`, `s10a01`).
+6. Run the apps:
    - Frontend: `npm run dev:web`
    - Backend: `npm run dev:api`
 
-_TBD in a later phase: a single one-command startup, sample-data loading instructions, and
-login credentials for a student/teacher/other user — none of that exists yet._
+_TBD in a later phase: a single one-command startup. Logging in isn't implemented yet._
 
 ## Repository structure
 

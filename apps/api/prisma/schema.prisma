@@ -1,13 +1,140 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Quizora database schema — see DECISIONS.md (Phase 2) for the reasoning behind it.
+//
+// Some rules can't be expressed here and live as raw SQL at the end of
+// prisma/migrations/*_init/migration.sql:
+//   - CHECK: Quiz.closesAt > Quiz.opensAt
+//   - CHECK: Quiz.timeLimitMinutes > 0
+//   - CHECK: Quiz.negativeMarkPercent BETWEEN 0 AND 100
+//   - CHECK: Question.points > 0
+//   - CHECK: students have a classId, teachers don't
+//   - PARTIAL UNIQUE INDEX: at most one correct Option per Question
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = "" // extensionless imports, so ts-node and ts-jest can load the generated .ts files
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+model Class {
+  id       String      @id @default(uuid())
+  name     String      @unique // "10A", "10B", "11A"
+  students User[]
+  quizzes  QuizClass[]
+}
+
+model User {
+  id           String        @id @default(uuid())
+  username     String        @unique // login name; students may not have an email
+  passwordHash String
+  fullName     String // Arabic or Latin
+  role         Role
+  classId      String? // required for students, null for teachers (CHECK in migration)
+  class        Class?        @relation(fields: [classId], references: [id], onDelete: Restrict)
+  quizzes      Quiz[] // quizzes this teacher owns
+  attempts     QuizAttempt[]
+
+  @@index([classId])
+}
+
+model Quiz {
+  id                  String        @id @default(uuid())
+  title               String
+  description         String?
+  teacherId           String // owner: the only teacher who can edit it or see its results
+  teacher             User          @relation(fields: [teacherId], references: [id])
+  opensAt             DateTime
+  closesAt            DateTime
+  timeLimitMinutes    Int
+  // Percentage of a question's points lost for a wrong answer. 0 = negative marking off.
+  negativeMarkPercent Int           @default(0)
+  publishedAt         DateTime? // null = draft, hidden from students
+  questions           Question[]
+  classes             QuizClass[]
+  attempts            QuizAttempt[]
+
+  @@index([teacherId])
+}
+
+model QuizClass {
+  quizId  String
+  quiz    Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([quizId, classId])
+  @@index([classId])
+}
+
+model Question {
+  id       String   @id @default(uuid())
+  quizId   String
+  quiz     Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text     String
+  points   Int
+  position Int
+  options  Option[]
+  answers  Answer[]
+
+  @@unique([quizId, position])
+}
+
+model Option {
+  id         String   @id @default(uuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean // never sent to students
+  position   Int
+  answers    Answer[]
+
+  @@unique([questionId, position])
+}
+
+model QuizAttempt {
+  id          String        @id @default(uuid())
+  quizId      String
+  // Restrict: a quiz that has attempts can't be deleted.
+  quiz        Quiz          @relation(fields: [quizId], references: [id], onDelete: Restrict)
+  studentId   String
+  student     User          @relation(fields: [studentId], references: [id])
+  startedAt   DateTime      @default(now()) // server clock only
+  // min(startedAt + timeLimitMinutes, quiz.closesAt), fixed when the attempt starts
+  expiresAt   DateTime
+  submittedAt DateTime?
+  status      AttemptStatus @default(IN_PROGRESS)
+  score       Decimal?      @db.Decimal(8, 2) // computed server-side when the attempt ends
+  maxScore    Int?
+  answers     Answer[]
+
+  @@unique([quizId, studentId]) // one attempt per student per quiz, race-safe
+  @@index([studentId])
+}
+
+model Answer {
+  id            String      @id @default(uuid())
+  attemptId     String
+  attempt       QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      Question    @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  optionId      String
+  option        Option      @relation(fields: [optionId], references: [id], onDelete: Restrict)
+  pointsAwarded Decimal?    @db.Decimal(8, 2) // filled in at scoring time
+
+  @@unique([attemptId, questionId]) // one answer per question; changing it overwrites it
 }
