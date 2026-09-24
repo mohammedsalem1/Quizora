@@ -174,3 +174,52 @@ the end of the init migration (listed at the top of the schema file).
 - **Throttling repeated login attempts** → Phase 12 (security review).
 - **Allowing the web app's origin (CORS)** → Phase 7, when the web app first calls the API.
 - **Login page** → Phase 7.
+
+## Phase 5 — Teacher quiz management
+
+### API
+
+All routes require the TEACHER role and act only on the caller's own quizzes.
+
+| Route | Purpose |
+|---|---|
+| `GET /classes` | Classes a quiz can be assigned to |
+| `GET /teacher/quizzes` | The caller's quizzes, with question and attempt counts |
+| `POST /teacher/quizzes` | Create a draft (title, description, dates, time limit, negative-marking %, classes) |
+| `GET /teacher/quizzes/:id` | Full quiz including correct answers |
+| `PATCH /teacher/quizzes/:id` | Change settings |
+| `POST /teacher/quizzes/:id/questions` | Add a question with its options |
+| `PUT /teacher/quizzes/:id/questions/:questionId` | Replace a question's text, points and options |
+| `DELETE /teacher/quizzes/:id/questions/:questionId` | Remove a question |
+| `POST /teacher/quizzes/:id/publish` | Check the quiz is complete, then publish it |
+
+### Decisions
+
+- **Options are saved together with their question** (no separate option endpoints). Every
+  save must have 2–6 options with distinct texts and **exactly one** correct answer, so a
+  half-built question can't exist. This is stricter than the Phase 2 plan, which only
+  required "exactly one correct" at publish time. Publishing still re-checks it, as a
+  safeguard.
+- **Another teacher's quiz returns 404, not 403**, so a teacher can't learn whether a quiz
+  exists. The owner always comes from the token; the body can't set `teacherId` or
+  `publishedAt` (400).
+- **Dates must include a timezone** (`Z` or `+03:00`). Without one, `09:00` would be read in
+  the server's timezone, which isn't necessarily Amman's.
+- **Limits:** time limit 1–300 minutes, 1–100 points per question, at most 100 questions per
+  quiz, 1–20 classes per quiz, titles up to 200 characters.
+- **Publishing** needs at least one question, at least one class, a closing date in the
+  future, and every question valid. It lists every problem at once (409). Publishing twice
+  is harmless. A published quiz can still be edited until a student starts it, but can't
+  lose its last question.
+- **The lock after the first attempt (approved in Phase 2) is enforced.** Adding, editing
+  or deleting questions and changing the time limit or negative marking return 409. The
+  title, description, dates and classes stay editable.
+- **Edits and the first attempt can't overlap.** Every change locks the quiz's row
+  (`SELECT … FOR UPDATE`) for the length of its transaction. Postgres makes an attempt
+  insert, which references the quiz, wait for that lock and vice versa, so "no attempts
+  yet" can't turn false halfway through an edit. Phase 8 gets this without extra code.
+
+### Deliberately left out
+
+- Deleting a quiz, unpublishing, and reordering questions. The brief doesn't ask for them.
+  Each would be a small addition.

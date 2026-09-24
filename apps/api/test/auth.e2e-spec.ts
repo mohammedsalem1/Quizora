@@ -1,12 +1,11 @@
 import { Controller, Get, INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
 import { Roles } from '../src/auth/decorators';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createTestApp } from './helpers';
 
 // Test-only routes, so role checks can be tested before the real teacher/student
 // endpoints exist. The app's global guards apply to them exactly as to real routes.
@@ -45,31 +44,8 @@ describe('Authentication & roles (e2e)', () => {
   let classId: string;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-      controllers: [RoleProbeController],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    await app.init();
-    prisma = app.get(PrismaService);
+    ({ app, prisma } = await createTestApp([RoleProbeController]));
     jwt = app.get(JwtService);
-
-    // Belt and braces on top of test/setup-env.ts: never wipe a non-test database.
-    const [{ db }] = await prisma.$queryRaw<
-      { db: string }[]
-    >`SELECT current_database() AS db`;
-    if (!db.endsWith('_test')) {
-      throw new Error(`Refusing to wipe non-test database "${db}"`);
-    }
-
-    await prisma.answer.deleteMany();
-    await prisma.quizAttempt.deleteMany();
-    await prisma.quizClass.deleteMany();
-    await prisma.option.deleteMany();
-    await prisma.question.deleteMany();
-    await prisma.quiz.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.class.deleteMany();
 
     const passwordHash = await bcrypt.hash(PASSWORD, 4); // low cost: tests only
     classId = (await prisma.class.create({ data: { name: '10A' } })).id;

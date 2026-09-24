@@ -89,3 +89,24 @@ Honest account of how AI tools were used on this project. Updated as work progre
   The app built and ran, but the tests failed because those versions are ESM-only and meant
   for NestJS 12. The AI switched to the NestJS 11 versions instead of working around the
   problem in Jest.
+
+## Phase 5 — Teacher quiz management
+
+- The AI wrote the teacher quiz API (DTOs, service, controllers) and 67 new e2e tests. Before
+  writing code it listed the endpoints and the choices it was making (options saved together
+  with their question, 404 for other teachers' quizzes, dates must include a timezone, what
+  was left out).
+- How it was checked:
+  - 92 e2e tests in total. The new ones cover role checks and ownership, 22 invalid quiz
+    settings, 14 invalid questions, swapping in another quiz's question ID, publishing rules,
+    and the lock after a student starts.
+  - Four protections were removed on purpose, one at a time: the ownership filter, the
+    post-attempt lock, the one-correct-answer rule, and the check that a question belongs to
+    the quiz in the URL. Each time at least one test failed, and each was restored
+    byte-for-byte.
+  - The endpoints were also tried by hand against the seeded dev data.
+- Caught along the way:
+  - One test compared two separately generated "equal" dates that were a millisecond
+    apart; the test was fixed, not the code.
+  - Running the formatter over `src/` rewrote line endings in unrelated files (Windows
+    checkout); those files were restored so the commit only contains real changes.
