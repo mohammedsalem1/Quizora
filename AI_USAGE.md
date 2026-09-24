@@ -41,3 +41,30 @@ Honest account of how AI tools were used on this project. Updated as work progre
   `DECISIONS.md`). The AI first misdiagnosed two build errors as needing config workarounds
   (forcing webpack, restricting TypeScript `types`). After a clean reinstall it re-tested
   without them, found the real cause was a corrupted `node_modules`, and reverted both.
+
+## Phase 2 — Data model design
+
+- The AI (Claude Code, Opus 5.5) proposed the data model as a draft Prisma schema with its
+  reasoning, before any code was written. The human reviewed it, chose each of the four
+  scoring and timing rules (how negative marking is represented, whether a score can go below
+  0, when a late-started attempt ends, whether to have a draft/publish step) from options the
+  AI laid out, and approved the rest.
+
+## Phase 3 — Database implementation
+
+- The AI wrote the Prisma schema, the hand-written SQL constraints in the init migration,
+  the seed script (with fictional Arabic names and Arabic/English quiz content) and the
+  npm scripts, following the approved design.
+- How it was checked, beyond "it runs":
+  - Every database constraint was tested by running SQL that should violate it (12 cases,
+    such as a second attempt, a second correct option, a teacher with a class or a 101%
+    penalty) and confirming each was rejected by the intended constraint.
+  - The migration and seed were run on a brand-new throwaway database, and the live database
+    was diffed against the schema to confirm Prisma won't try to drop the hand-written
+    constraints later.
+  - Arabic text was read back from Postgres and its character count checked.
+- Found while reviewing the AI's output: Prisma's generated SQL made the student→class link
+  `ON DELETE SET NULL`, which would have clashed with the "students have a class" check; it
+  was changed to `RESTRICT` before the migration was applied. The generated Prisma client
+  also failed to load under `ts-node` at first; it was fixed with a generator option rather
+  than a workaround in the seed.
