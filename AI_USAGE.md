@@ -110,3 +110,47 @@ Honest account of how AI tools were used on this project. Updated as work progre
     apart; the test was fixed, not the code.
   - Running the formatter over `src/` rewrote line endings in unrelated files (Windows
     checkout); those files were restored so the commit only contains real changes.
+
+## Between Phases 5 and 6 — Web frontend
+
+- **Scope.** The human asked for the frontend before Phase 6. The AI asked three questions:
+  scope, interface language and where to keep the token. The human chose everything the API
+  supports today, an Arabic RTL interface, and an httpOnly cookie. The AI wrote a plan, and
+  the human approved it before any code was written.
+- **Next.js 16 changes.** This version renames `middleware` to `proxy` and makes `params`
+  and `cookies()` async. The AI had a sub-agent read the docs bundled with Next.js 16
+  instead of relying on its training data, and followed those conventions.
+- **Skills used:**
+  - `frontend-design` for the visual direction.
+  - `ui-ux-pro-max`, which the human installed mid-build with `npx skills add`. Before using
+    it, the AI read its instructions and scanned its scripts: local data only, no network
+    calls.
+  - The skill's suggestions were checked for fit, not applied wholesale. Its fonts were
+    rejected (Latin-only, no Arabic), and so was its landing-page pattern (Quizora is an
+    app). Its form and touch rules were adopted: errors at each field linked with
+    `aria-describedby`, focus on the first invalid field, pressed states, and confirmation
+    after saving.
+- **How it was checked:**
+  - `next build` and `lint`, both clean.
+  - The whole flow through the web app's own `/api` routes with `curl`: cookie flags, no
+    token in any response body, 415 for non-JSON changes, a student refused on teacher
+    routes, a forged cookie cleared, and `?from=` rejecting other sites.
+  - A scratch script drove headless Edge at 375px over the DevTools protocol through every
+    screen, including error states and the locked quiz. It reported horizontal overflow and
+    console errors (none), and its screenshots were reviewed. That review found two things,
+    which were then fixed: dates shown as `2026/10/08`, and option inputs too narrow on
+    phones.
+  - The backend test suites were re-run (1 + 92 passing) to confirm the API was untouched.
+- **Mistakes caught along the way:**
+  - Running the skill's Python script created `__pycache__` files, and the first skill
+    commit included them. A follow-up commit untracked them and added them to `.gitignore`;
+    history wasn't rewritten.
+  - A hand test sent Arabic through `curl` arguments, which Git Bash on Windows mangled
+    before sending, so a test quiz was stored with replacement characters. It was traced to
+    the test harness (not the app), deleted, and redone with UTF-8 request files, and the
+    stored bytes were checked.
+  - A `px-3` class that was meant to shrink the delete buttons had no effect, because the
+    built-in `px-4` wins. A proper `compact` size replaced it.
+  - An early form design would have caused hydration mismatches, because default dates
+    depend on the browser's clock and timezone. It was changed so the form renders only in
+    the browser.
