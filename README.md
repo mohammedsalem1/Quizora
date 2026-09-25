@@ -82,11 +82,37 @@ cookie and forwards `/api/*` requests to the NestJS API, which does every check.
 
 ## Tests
 
-- Unit tests: `npm run test:api`
-- API end-to-end tests: `npm run test:api:e2e`. These need Postgres running. They use a
-  separate database (`TEST_DATABASE_URL` in `apps/api/.env`, created and migrated
-  automatically) and **delete all data in it**, so they refuse to run unless its name ends
-  in `_test`.
+Run everything from the repository root with `npm test` (Postgres must be running:
+`docker compose up -d`). Or run one suite:
+
+| Command | What it runs | Needs |
+|---|---|---|
+| `npm run test:api` | API unit tests (Jest): pure rules such as scoring, availability, deadlines, statistics, the login throttle and the production secret check | nothing |
+| `npm run test:api:e2e` | API end-to-end tests (Jest + Supertest): the real app and a real database, called over HTTP | Postgres |
+| `npm run test:web` | Web unit tests (Node's built-in test runner, no extra dependencies): return-path guard, request guards, body-size limit, Arabic plurals | nothing |
+
+**The e2e tests use a separate database.** It's set by `TEST_DATABASE_URL` in `apps/api/.env`,
+and is created, emptied and migrated automatically. Every test file **deletes all data in
+it**, so the tests refuse to run unless the database name ends in `_test`. The files run
+one at a time (`--runInBand`) because they share that database. Don't run two e2e runs at
+once.
+
+**Where each rule is tested:**
+
+| Rule | Tests |
+|---|---|
+| Logging in, tokens (HS256, 12 hours, only the user id), expired, forged or deleted-account tokens, password guessing | `test/auth.e2e-spec.ts`, `test/security.e2e-spec.ts`, `src/auth/*.spec.ts` |
+| Roles and ownership on every route; a teacher sees only their own quizzes and results; a student only their own attempt | `test/security.e2e-spec.ts`, `test/teacher-quizzes.e2e-spec.ts`, `test/teacher-results.e2e-spec.ts` |
+| Quiz availability: class, draft, opening and closing window | `src/quizzes/availability.spec.ts`, `test/student-quizzes.e2e-spec.ts` |
+| One attempt per student, including simultaneous starts | `test/student-attempts.e2e-spec.ts` |
+| Timer: server deadline, expiry, no answers or submission after it, including races | `src/attempts/attempt-rules.spec.ts`, `test/student-attempts.e2e-spec.ts` |
+| Scoring and negative marking | `src/attempts/scoring.spec.ts`, `test/student-attempts.e2e-spec.ts` ("scoring") |
+| Teacher statistics | `src/quizzes/quiz-results.spec.ts`, `test/teacher-results.e2e-spec.ts` |
+| The quiz locking after the first attempt | `test/teacher-quizzes.e2e-spec.ts`, `test/student-attempts.e2e-spec.ts` |
+| Malformed requests and database safety nets | `test/security.e2e-spec.ts`, `test/teacher-quizzes.e2e-spec.ts`, `test/student-attempts.e2e-spec.ts` |
+
+API test paths are relative to `apps/api`. The web tests sit next to the code they test in
+`apps/web/lib` (`*.test.mts`).
 
 ## Repository structure
 

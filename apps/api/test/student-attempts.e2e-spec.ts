@@ -236,8 +236,13 @@ describe('Student attempts (e2e)', () => {
   }
 
   // Locks an attempt's row until release() is called, so requests queue behind it in the
-  // order they arrive (the same lock answer saves and the submit take).
-  function holdAttemptRow(quizId: string, studentId: string) {
+  // order they arrive (the same lock answer saves and the submit take). `edit` runs inside
+  // that transaction after release(), before it commits.
+  function holdAttemptRow(
+    quizId: string,
+    studentId: string,
+    edit: (tx: Prisma.TransactionClient) => Promise<unknown> = async () => {},
+  ) {
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
     const done = prisma.$transaction(
@@ -247,6 +252,7 @@ describe('Student attempts (e2e)', () => {
           WHERE "quizId" = ${quizId} AND "studentId" = ${studentId}
           FOR UPDATE`;
         await released;
+        await edit(tx);
       },
       { timeout: 20_000 },
     );
@@ -381,6 +387,48 @@ describe('Student attempts (e2e)', () => {
       ).toBe(1);
     });
 
+    it('resumes an attempt another request is still creating (the unique index, then resume)', async () => {
+      const quiz = await createQuiz();
+      // Another request (the same student on a second device) has inserted the attempt but
+      // not committed yet. This start sees no attempt, inserts, waits on the unique index,
+      // gets the duplicate error once the other commits, and must resume that attempt.
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let heldId = '';
+      const held = prisma.$transaction(
+        async (tx) => {
+          const now = new Date();
+          heldId = (
+            await tx.quizAttempt.create({
+              data: {
+                quizId: quiz.id,
+                studentId: studentIds.a1,
+                startedAt: now,
+                expiresAt: new Date(now.getTime() + 20 * MINUTE_MS),
+              },
+              select: { id: true },
+            })
+          ).id;
+          await released;
+        },
+        { timeout: 20_000 },
+      );
+      for (let i = 0; i < 100 && !heldId; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const starting = start(quiz.id, tokens.a1).then((res) => res);
+      await waitForLockWaiters(1);
+      release();
+      await held;
+
+      const res = await starting;
+      expect(res.status).toBe(200);
+      expect((res.body as AttemptView).id).toBe(heldId);
+      expect(
+        await prisma.quizAttempt.count({ where: { quizId: quiz.id } }),
+      ).toBe(1);
+    });
+
     it("waits for a teacher's edit in progress and starts from the edited settings", async () => {
       const quiz = await createQuiz({ timeLimitMinutes: 20 });
       // The teacher changes the time limit (allowed: nobody has started yet) while the
@@ -477,6 +525,12 @@ describe('Student attempts (e2e)', () => {
       const after = (await getAttempt(quiz.id, tokens.a1).expect(200))
         .body as AttemptView;
       expect(after.expiresAt).toBe(early.expiresAt);
+      // Resuming (starting again) must not recalculate it either.
+      const resumed = await startOk(quiz.id, tokens.a1);
+      expect(resumed.expiresAt).toBe(early.expiresAt);
+      expect(
+        (await rowOf(quiz.id, studentIds.a1)).expiresAt.toISOString(),
+      ).toBe(early.expiresAt);
 
       const late = await startOk(quiz.id, tokens.a2);
       expect(
@@ -498,6 +552,9 @@ describe('Student attempts (e2e)', () => {
         .body as AttemptView;
       expect(after.status).toBe('IN_PROGRESS');
       expect(after.expiresAt).toBe(running.expiresAt);
+      expect((await startOk(quiz.id, tokens.a1)).expiresAt).toBe(
+        running.expiresAt,
+      );
       const q = quiz.questions[0];
       await answer(
         quiz.id,
@@ -508,6 +565,45 @@ describe('Student attempts (e2e)', () => {
       await submit(quiz.id, tokens.a1).expect(200);
 
       await start(quiz.id, tokens.a2).expect(409);
+    });
+
+    it("refuses a teacher's scoring change that races a student's start", async () => {
+      // A start holds the quiz row (FOR SHARE) and has inserted its attempt, not committed yet.
+      // The teacher's edit must wait for it, then see the attempt and refuse the change.
+      const quiz = await createQuiz();
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      const starting = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "Quiz" WHERE id = ${quiz.id} FOR SHARE`;
+          const now = new Date();
+          await tx.quizAttempt.create({
+            data: {
+              quizId: quiz.id,
+              studentId: studentIds.a1,
+              startedAt: now,
+              expiresAt: new Date(now.getTime() + 20 * MINUTE_MS),
+            },
+          });
+          await released;
+        },
+        { timeout: 20_000 },
+      );
+      await waitForLockWaiters(0);
+      const editing = server()
+        .patch(`/teacher/quizzes/${quiz.id}`)
+        .set('Authorization', `Bearer ${tokens.teacher}`)
+        .send({ negativeMarkPercent: 0 })
+        .then((res) => res);
+      await waitForLockWaiters(1);
+      release();
+      await starting;
+
+      expect((await editing).status).toBe(409);
+      const stored = await prisma.quiz.findUniqueOrThrow({
+        where: { id: quiz.id },
+      });
+      expect(stored.negativeMarkPercent).toBe(25);
     });
 
     it('lets the student resume and answer after the teacher removes their class', async () => {
@@ -831,6 +927,35 @@ describe('Student attempts (e2e)', () => {
       expect((await rowOf(quiz.id, studentIds.a1)).status).toBe('EXPIRED');
     });
 
+    it('does not expire an attempt that a submit ends while the expiry step waits for it', async () => {
+      // The expiry step reads the attempt as running and overdue, then waits for its row lock.
+      // Meanwhile a submit (held here) ends it in time. Once it gets the lock, it must
+      // re-check and leave the submission alone.
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      await runOutOfTime(quiz.id, studentIds.a1);
+      const before = await rowOf(quiz.id, studentIds.a1);
+      const submittedAt = new Date(before.expiresAt.getTime() - 1000);
+      const hold = holdAttemptRow(quiz.id, studentIds.a1, (tx) =>
+        tx.quizAttempt.update({
+          where: { id: before.id },
+          data: { status: 'SUBMITTED', submittedAt, score: 0, maxScore: 5 },
+        }),
+      );
+      const listing = server()
+        .get('/student/quizzes')
+        .set('Authorization', `Bearer ${tokens.a1}`)
+        .then((r) => r);
+      await waitForLockWaiters(1);
+      hold.release();
+      await hold.done;
+      expect((await listing).status).toBe(200);
+
+      const after = await rowOf(quiz.id, studentIds.a1);
+      expect(after.status).toBe('SUBMITTED');
+      expect(after.submittedAt?.toISOString()).toBe(submittedAt.toISOString());
+    });
+
     it('never turns a submitted attempt into an expired one', async () => {
       const quiz = await createQuiz();
       await startOk(quiz.id);
@@ -974,6 +1099,60 @@ describe('Student attempts (e2e)', () => {
       expect(row.answers).toEqual([]);
     });
 
+    it('refuses an answer, a clear and a submit whose deadline passes while they wait for the lock', async () => {
+      // Each request passes the expiry step (not overdue yet) and queues on the row lock.
+      // While it waits, the deadline passes. The check made after the lock must refuse it.
+      for (const kind of ['answer', 'clear', 'submit'] as const) {
+        const quiz = await createQuiz();
+        await startOk(quiz.id);
+        const [q1] = quiz.questions;
+        if (kind === 'clear') {
+          await answer(
+            quiz.id,
+            q1.id,
+            { optionId: q1.optionIds[0] },
+            tokens.a1,
+          ).expect(200);
+        }
+        const hold = holdAttemptRow(quiz.id, studentIds.a1, async (tx) => {
+          const now = Date.now();
+          await tx.quizAttempt.update({
+            where: {
+              quizId_studentId: { quizId: quiz.id, studentId: studentIds.a1 },
+            },
+            data: {
+              startedAt: new Date(now - 20 * MINUTE_MS),
+              expiresAt: new Date(now),
+            },
+          });
+        });
+        const pending =
+          kind === 'answer'
+            ? answer(
+                quiz.id,
+                q1.id,
+                { optionId: q1.optionIds[0] },
+                tokens.a1,
+              ).then((r) => r)
+            : kind === 'clear'
+              ? clear(quiz.id, q1.id, tokens.a1).then((r) => r)
+              : submit(quiz.id, tokens.a1).then((r) => r);
+        await waitForLockWaiters(1);
+        hold.release();
+        await hold.done;
+
+        const res = await pending;
+        expect([kind, res.status]).toEqual([kind, 409]);
+        const row = await rowOf(quiz.id, studentIds.a1);
+        expect(row.submittedAt).toBeNull();
+        // The answer wasn't saved, and the one to be cleared is still there.
+        expect([kind, row.answers.length]).toEqual([
+          kind,
+          kind === 'clear' ? 1 : 0,
+        ]);
+      }
+    });
+
     it('keeps an answer that arrives just before the submit', async () => {
       const quiz = await createQuiz();
       await startOk(quiz.id);
@@ -996,7 +1175,9 @@ describe('Student attempts (e2e)', () => {
       const submitted = await submitting;
       expect(submitted.status).toBe(200);
       expect((submitted.body as AttemptView).answeredCount).toBe(1);
-      expect((await rowOf(quiz.id, studentIds.a1)).answers).toHaveLength(1);
+      expect((submitted.body as AttemptView).score).toBe(2); // q1 answered correctly
+      const row = await rowOf(quiz.id, studentIds.a1);
+      expect(row.answers.map((a) => a.pointsAwarded?.toNumber())).toEqual([2]);
     });
 
     it('submits once when two submits arrive together', async () => {
@@ -1042,6 +1223,20 @@ describe('Student attempts (e2e)', () => {
       });
     }
     const t = (minutes: number) => new Date(Date.now() + minutes * MINUTE_MS);
+
+    it('rejects a second attempt for the same student and quiz (unique index)', async () => {
+      const quiz = await createQuiz();
+      const data = {
+        quizId: quiz.id,
+        studentId: studentIds.b1,
+        startedAt: t(-5),
+        expiresAt: t(15),
+      };
+      await prisma.quizAttempt.create({ data });
+      await expect(prisma.quizAttempt.create({ data })).rejects.toThrow(
+        /Unique constraint/,
+      );
+    });
 
     it('rejects a deadline that is not after the start', async () => {
       const at = t(0);

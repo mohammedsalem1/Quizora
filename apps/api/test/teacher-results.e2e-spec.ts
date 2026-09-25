@@ -290,7 +290,7 @@ describe('Teacher quiz results (e2e)', () => {
       ]);
     });
 
-    it('lists every student of the assigned classes, by class then name', () => {
+    it('lists every student of the assigned classes, by class then name', async () => {
       expect(
         body.students.map((s) => [s.username, s.className, s.status, s.score]),
       ).toEqual([
@@ -303,8 +303,22 @@ describe('Teacher quiz results (e2e)', () => {
       const byUser = new Map(body.students.map((s) => [s.username, s]));
       expect(byUser.get('a3')?.answeredCount).toBe(1);
       expect(byUser.get('a4')?.startedAt).toBeNull();
-      expect(byUser.get('a1')?.finishedAt).not.toBeNull();
-      expect(byUser.get('b1')?.finishedAt).not.toBeNull();
+      // Submitted: the submission time. Timed out: the deadline.
+      const rowFor = (username: string) =>
+        prisma.quizAttempt.findUniqueOrThrow({
+          where: {
+            quizId_studentId: {
+              quizId: quiz.id,
+              studentId: users[username].id,
+            },
+          },
+        });
+      expect(byUser.get('a1')?.finishedAt).toBe(
+        (await rowFor('a1')).submittedAt?.toISOString(),
+      );
+      expect(byUser.get('b1')?.finishedAt).toBe(
+        (await rowFor('b1')).expiresAt.toISOString(),
+      );
       expect(byUser.get('a3')?.finishedAt).toBeNull();
     });
 

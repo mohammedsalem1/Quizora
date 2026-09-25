@@ -292,6 +292,27 @@ describe('Teacher quiz management (e2e)', () => {
   });
 
   describe('questions and options', () => {
+    it('refuses a 101st question', async () => {
+      const quiz = await createQuiz();
+      await prisma.question.createMany({
+        data: Array.from({ length: 100 }, (_, i) => ({
+          quizId: quiz.id,
+          text: `سؤال ${i + 1}`,
+          points: 1,
+          position: i + 1,
+        })),
+      });
+      const res = await as(teacherToken)
+        .post(`/teacher/quizzes/${quiz.id}/questions`, validQuestion())
+        .expect(409);
+      expect(res.body).toMatchObject({
+        message: 'A quiz can have at most 100 questions',
+      });
+      expect(await prisma.question.count({ where: { quizId: quiz.id } })).toBe(
+        100,
+      );
+    });
+
     it('adds questions with their options, in order', async () => {
       const quiz = await createQuiz();
       await addQuestion(quiz.id);
@@ -499,6 +520,34 @@ describe('Teacher quiz management (e2e)', () => {
       expect((second.body as QuizBody).publishedAt).toBe(publishedAt);
     });
 
+    it('lists every problem at once, including the safeguards question saves already enforce', async () => {
+      // The API never lets a quiz lose all its classes or save a question without exactly one
+      // correct answer; publishing checks again anyway. Break both directly in the database.
+      const quiz = await addQuestion(
+        (await createQuiz({ opensAt: inDays(-10), closesAt: inDays(-1) })).id,
+      );
+      await prisma.quizClass.deleteMany({ where: { quizId: quiz.id } });
+      await prisma.option.updateMany({
+        where: { questionId: quiz.questions[0].id },
+        data: { isCorrect: false },
+      });
+
+      const res = await as(teacherToken)
+        .post(`/teacher/quizzes/${quiz.id}/publish`)
+        .expect(409);
+      expect(res.body).toMatchObject({
+        message: [
+          'The closing date has already passed',
+          'Assign the quiz to at least one class',
+          'Question 1 needs at least two options and exactly one correct answer',
+        ],
+      });
+      const stored = await prisma.quiz.findUniqueOrThrow({
+        where: { id: quiz.id },
+      });
+      expect(stored.publishedAt).toBeNull();
+    });
+
     it('keeps at least one question on a published quiz', async () => {
       const quiz = await addQuestion((await createQuiz()).id);
       await as(teacherToken)
@@ -616,6 +665,59 @@ describe('Teacher quiz management (e2e)', () => {
         isLocked: true,
       });
     });
+  });
+
+  it('keeps the quiz locked after every attempt has finished (submitted or timed out)', async () => {
+    // The lock is about attempts existing, not running: finished attempts were scored under
+    // these rules, and later students must be scored under the same ones.
+    for (const status of ['SUBMITTED', 'EXPIRED'] as const) {
+      const quiz = await addQuestion(
+        (await createQuiz({ opensAt: inDays(-1) })).id,
+      );
+      await as(teacherToken)
+        .post(`/teacher/quizzes/${quiz.id}/publish`)
+        .expect(200);
+      const startedAt = new Date(Date.now() - 60 * 60 * 1000);
+      await prisma.quizAttempt.create({
+        data: {
+          quizId: quiz.id,
+          studentId,
+          status,
+          startedAt,
+          expiresAt: new Date(startedAt.getTime() + 20 * 60 * 1000),
+          submittedAt:
+            status === 'SUBMITTED'
+              ? new Date(startedAt.getTime() + 5 * 60 * 1000)
+              : null,
+          score: 0,
+          maxScore: 2,
+        },
+      });
+      const questionId = quiz.questions[0].id;
+      const refused = [
+        await as(teacherToken).patch(`/teacher/quizzes/${quiz.id}`, {
+          timeLimitMinutes: 45,
+        }),
+        await as(teacherToken).patch(`/teacher/quizzes/${quiz.id}`, {
+          negativeMarkPercent: 0,
+        }),
+        await as(teacherToken).post(
+          `/teacher/quizzes/${quiz.id}/questions`,
+          validQuestion(),
+        ),
+        await as(teacherToken).put(
+          `/teacher/quizzes/${quiz.id}/questions/${questionId}`,
+          validQuestion({ points: 10 }),
+        ),
+        await as(teacherToken).delete(
+          `/teacher/quizzes/${quiz.id}/questions/${questionId}`,
+        ),
+      ];
+      expect([status, refused.map((r) => r.status)]).toEqual([
+        status,
+        [409, 409, 409, 409, 409],
+      ]);
+    }
   });
 
   describe('listing', () => {

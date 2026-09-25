@@ -216,7 +216,14 @@ describe('Security & edge cases (e2e)', () => {
       const list = await call('get', '/student/quizzes', as('student2')).expect(
         200,
       );
-      expect(JSON.stringify(list.body)).not.toContain(users.student1.id);
+      const listed = (list.body as { id: string }[]).find(
+        (q) => q.id === quiz.id,
+      );
+      expect(listed).toMatchObject({
+        state: 'AVAILABLE',
+        score: null,
+        maxScore: null,
+      });
     });
 
     it("can't be read by a teacher who doesn't own the quiz", async () => {
@@ -272,6 +279,56 @@ describe('Security & edge cases (e2e)', () => {
         include: { questions: { include: { options: true } }, classes: true },
       });
       expect(after).toEqual(before);
+    });
+
+    it('answers 404, never 409, even when the quiz is locked or not ready to publish', async () => {
+      // A 409 would reveal that the quiz exists and what state it is in.
+      const locked = await createQuiz(users.teacher2.id);
+      await call(
+        'post',
+        `/student/quizzes/${locked.id}/attempt`,
+        as('student1'),
+      ).expect(200);
+      const [q1] = locked.questions;
+      const question = {
+        text: 'q',
+        points: 1,
+        options: [
+          { text: 'a', isCorrect: true },
+          { text: 'b', isCorrect: false },
+        ],
+      };
+      const attempts: [Method, string, object][] = [
+        ['patch', `/teacher/quizzes/${locked.id}`, { timeLimitMinutes: 99 }],
+        ['post', `/teacher/quizzes/${locked.id}/questions`, question],
+        ['put', `/teacher/quizzes/${locked.id}/questions/${q1.id}`, question],
+        ['delete', `/teacher/quizzes/${locked.id}/questions/${q1.id}`, {}],
+      ];
+      for (const [method, path, body] of attempts) {
+        const res = await call(method, path, as('teacher1')).send(body);
+        expect([method, path, res.status]).toEqual([method, path, 404]);
+      }
+
+      // A draft of teacher2's with no questions: publishing would be a 409 for its owner.
+      const draft = await prisma.quiz.create({
+        data: {
+          title: 'draft',
+          teacherId: users.teacher2.id,
+          opensAt: new Date(Date.now() + 60 * MINUTE_MS),
+          closesAt: new Date(Date.now() + 120 * MINUTE_MS),
+          timeLimitMinutes: 20,
+        },
+      });
+      await call(
+        'post',
+        `/teacher/quizzes/${draft.id}/publish`,
+        as('teacher1'),
+      ).expect(404);
+      await call(
+        'post',
+        `/teacher/quizzes/${draft.id}/publish`,
+        as('teacher2'),
+      ).expect(409);
     });
 
     it("can't take over a quiz by sending teacherId", async () => {
@@ -402,8 +459,23 @@ describe('Security & edge cases (e2e)', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await login('throttled', 'Right-Pass-1').expect(200);
-      // A successful login clears the count.
-      await login('throttled', 'wrong-after').expect(401);
+      // A successful login clears the count: without that, the second of these would be 429.
+      await login('throttled', 'wrong-after-1').expect(401);
+      await login('throttled', 'wrong-after-2').expect(401);
+    });
+
+    it("throttles unknown usernames the same way, so the limit doesn't reveal which exist", async () => {
+      const login = (username: string, password: string) =>
+        call('post', '/auth/login').send({ username, password });
+      for (let i = 0; i < 5; i++) {
+        await login('no-such-user', `guess-${i}`).expect(401);
+      }
+      const blocked = await login('no-such-user', 'guess-again').expect(429);
+      expect(blocked.body).toMatchObject({
+        message: 'Too many login attempts. Try again later.',
+      });
+      // The username is normalised first, so case and spaces don't give a fresh count.
+      await login('  NO-SUCH-USER ', 'guess-more').expect(429);
     });
   });
 
@@ -451,21 +523,21 @@ describe('Security & edge cases (e2e)', () => {
     });
 
     it('answers a NUL character in text with 400, not a database error', async () => {
-      // Postgres text can't hold  ; it must be refused before it reaches the database.
+      // Postgres text can't hold \u0000; it must be refused before it reaches the database.
       await call('post', '/auth/login')
-        .send({ username: 'a b', password: 'x' })
+        .send({ username: 'a\u0000b', password: 'x' })
         .expect(400);
       const own = await createQuiz(users.teacher1.id);
       await call('patch', `/teacher/quizzes/${own.id}`, as('teacher1'))
-        .send({ title: 'Quiz ' })
+        .send({ title: 'Quiz\u0000' })
         .expect(400);
       await call('patch', `/teacher/quizzes/${own.id}`, as('teacher1'))
-        .send({ description: 'a ' })
+        .send({ description: 'a\u0000' })
         .expect(400);
       const q = own.questions[0];
       for (const question of [
         {
-          text: 'q ',
+          text: 'q\u0000',
           points: 1,
           options: [
             { text: 'a', isCorrect: true },
@@ -476,7 +548,7 @@ describe('Security & edge cases (e2e)', () => {
           text: 'q',
           points: 1,
           options: [
-            { text: 'a ', isCorrect: true },
+            { text: 'a\u0000', isCorrect: true },
             { text: 'b', isCorrect: false },
           ],
         },
