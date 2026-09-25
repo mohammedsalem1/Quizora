@@ -5,8 +5,9 @@ students take them once within an open date range, and results are visible after
 
 > **Status:** database, sample data, login with student/teacher roles, and quiz building for
 > teachers work end to end, through the API and an Arabic, mobile-first web app (Phase 5).
-> The API also tells each student which quizzes are open to them (Phase 6). Quiz taking and
-> scoring for students are not implemented yet.
+> Students see which quizzes are open to them (Phase 6), and can start one, answer on their
+> phone and submit, with the deadline enforced by the server (Phase 7). Scoring is not
+> implemented yet.
 
 ## Stack
 
@@ -45,15 +46,24 @@ Log in at http://localhost:3000 with a sample account (password `Quizora@2026` f
 | `teacher.rana` | Teacher | A published Arabic maths quiz for 10A and 10B |
 | `teacher.omar` | Teacher | A published English biology quiz for 11A |
 | `teacher.huda` | Teacher | A draft Arabic grammar quiz, not yet published |
-| `s10a01` … `s10a06`, `s10b01` …, `s11a01` … | Student | A welcome page (quiz taking comes in a later phase) |
+| `s10a01` … `s10a06`, `s10b01` … | Student (10A, 10B) | The maths quiz, open now |
+| `s11a01` … | Student (11A) | The biology quiz, open now |
 
 As a teacher: create a quiz (dates, time limit, negative marking, classes), add questions
 and tap the letter of the correct answer, then publish. Other teachers can't open your
 quizzes, and once a student starts a quiz its questions and scoring rules are locked.
 
-Students can't take quizzes in the web app yet. The API already lists each student's quizzes
-with their state (`GET /student/quizzes`: not open yet, available, in progress, finished or
-closed), and the student pages arrive in Phase 7.
+As a student:
+1. Open a quiz from the list and start it. There's one attempt, and the timer runs on the
+   server.
+2. Tap an answer for each question. Answers are saved as you tap.
+3. Submit, or let the time run out.
+
+The result page shows how many questions you answered. The score arrives with scoring in
+Phase 9.
+
+Starting a sample quiz locks its questions for the teacher. `npm run db:seed` resets
+everything.
 
 The browser only talks to the web app. The web app keeps the login token in an httpOnly
 cookie and forwards `/api/*` requests to the NestJS API, which does every check.
