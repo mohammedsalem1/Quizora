@@ -7,8 +7,9 @@ students take them once within an open date range, and results are visible after
 > teachers work end to end, through the API and an Arabic, mobile-first web app (Phase 5).
 > Students see which quizzes are open to them (Phase 6), and can start one, answer on their
 > phone and submit, with the deadline enforced by the server (Phase 7). Expired attempts are
-> recorded, and the database itself refuses a late submission (Phase 8). Scoring is not
-> implemented yet.
+> recorded, and the database itself refuses a late submission (Phase 8). Scores, including
+> per-quiz negative marking, are calculated on the server when an attempt ends (Phase 9).
+> Teacher results come next.
 
 ## Stack
 
@@ -60,8 +61,9 @@ As a student:
 2. Tap an answer for each question. Answers are saved as you tap.
 3. Submit, or let the time run out.
 
-The result page shows how many questions you answered. The score arrives with scoring in
-Phase 9.
+The result page shows your score out of the maximum, and how many questions you answered.
+On the sample maths quiz, a wrong answer costs 25% of that question's points; a blank one
+costs nothing.
 
 Starting a sample quiz locks its questions for the teacher. `npm run db:seed` resets
 everything.
