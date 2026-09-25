@@ -21,6 +21,16 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "لا يمكن أن يزيد الاختبار عن 100 سؤال.",
   "Students have already started this quiz, so its questions, points, time limit and negative marking can no longer change":
     "بدأ الطلاب هذا الاختبار، لذلك لم يعد ممكناً تغيير الأسئلة أو العلامات أو المدة أو العلامة السالبة.",
+  // Taking a quiz (student)
+  "This quiz is not open yet": "لم يُفتح هذا الاختبار بعد.",
+  "This quiz is closed": "أُغلق هذا الاختبار.",
+  "You have already taken this quiz":
+    "قدّمت هذا الاختبار من قبل، ولكل طالب محاولة واحدة.",
+  "Time is up for this attempt": "انتهى وقت الاختبار.",
+  "This attempt has already been submitted": "سلّمت هذا الاختبار من قبل.",
+  "This option does not belong to the question":
+    "هذا الخيار ليس من خيارات السؤال.",
+  "Attempt not found": "لم تبدأ هذا الاختبار بعد.",
   // Not found
   "Quiz not found": "الاختبار غير موجود.",
   "Question not found": "السؤال غير موجود.",

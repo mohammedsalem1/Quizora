@@ -14,6 +14,11 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+// Set once the session has ended and the app is taking the user to the login page, so pages
+// don't hold that navigation back with a "leave this page?" prompt.
+let redirectingToLogin = false;
+export const isRedirectingToLogin = () => redirectingToLogin;
+
 export async function apiFetch<T>(
   path: string,
   options: { method?: Method; body?: unknown } = {},
@@ -34,6 +39,7 @@ export async function apiFetch<T>(
   }
 
   if (res.status === 401) {
+    redirectingToLogin = true;
     // Session expired (or the account was removed): start again from the login page. A full
     // page load on purpose, so no state from the old session survives in memory.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
