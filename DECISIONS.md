@@ -1,7 +1,236 @@
 # Decisions
 
-This file tracks assumptions, scope decisions, and what's left for later — updated as work
-progresses through each phase.
+The **summary** below groups the project's decisions under the brief's headings. The
+**[phase-by-phase log](#phase-by-phase-log)** after it records each decision in
+detail: when it was made, the alternatives, and what went wrong along the way. The summary
+names the phase to look under.
+
+## Summary
+
+### Assumptions
+
+- **Accounts are created by the centre, not by sign-up.** The brief only says users log in,
+  so there's no registration. Today the accounts come from the seed (Phase 4).
+- **Students log in with a username, not an email**, because not every student has one.
+  Usernames ignore letter case, since phone keyboards capitalise the first letter
+  (Phases 2, 4).
+- **Each student belongs to exactly one class; teachers belong to none.** Any teacher can
+  assign a quiz to any class, because the brief doesn't link teachers to classes (Phase 2).
+- **The teacher who creates a quiz owns it.** Only they can edit it or see its results
+  (Phase 2).
+- **Negative marking is a percentage of each wrong question's own points**, chosen per quiz
+  by its teacher (0 = off):
+  - A blank answer costs nothing.
+  - A quiz total never goes below 0.
+
+  The human chose the percentage form and the zero floor. A blank costing nothing was part
+  of the AI's proposed design, which the human approved (Phases 2, 9).
+- **"Student performance" means each student's result in each of the teacher's quizzes**,
+  plus basic statistics. There are no cross-quiz reports, per "no unnecessary analytics"
+  (Phase 10).
+- **Dates follow the centre's location, Amman (given in the brief).** They're shown in the
+  Jordanian Arabic form ("8 تشرين الأول") with Western digits. Teachers enter dates in their
+  browser's local time, assumed to be the centre's (web frontend section).
+- **The scale is small:** about 300 students and 12 teachers. So there's one API process and
+  one database, no pagination, no caching, and in-memory login throttling (Phases 6, 12).
+- **The brief's stack is used as given**, with no Redis, queues or microservices (Phase 1).
+  One small exception: the web app's unit tests use Node's built-in test runner instead of
+  Jest, to avoid adding dependencies (Phase 13).
+
+### Important design decisions
+
+**Security**
+- **The browser never sees the login token.**
+  - The web app keeps the token in an httpOnly, `SameSite=Lax` cookie and forwards `/api/*`
+    requests to the API.
+  - Requests with a body must be JSON, which a cross-site page can't send (nor a DELETE)
+    without CORS approval. No CORS is needed, so none is given.
+  - Phase 12 closed three gaps in this design: a token leak through `/api/Auth/login`,
+    cross-site logout, and an open redirect after login.
+  - See the web frontend section and Phase 12.
+- **Secure by default.**
+  - Every API route needs a valid token unless it's marked public.
+  - The token carries only the user id. The role is read from the database on every
+    request, so a changed role or a deleted account takes effect at once.
+  - See Phase 4.
+- **Other people's things look nonexistent.** Another teacher's quiz, or a quiz a student
+  can't see, returns 404, not 403 or 409, so its existence isn't revealed (Phases 5, 6, 13).
+- **Strict input.**
+  - Unknown fields are rejected.
+  - Dates must carry a timezone and be real calendar dates.
+  - NUL characters are refused.
+  - Bodies are limited to 100 KB.
+  - See Phases 4, 5 and 12.
+- **Password guessing is slowed per username.** After 5 failures, each new try waits 1, 2, 4
+  … up to 30 seconds. It's keyed on the username because the whole centre probably shares
+  one IP (deferred in Phase 4, built in Phase 12).
+
+**Quizzes**
+- **Draft, then publish.** Publishing checks the quiz is complete, and students never see a
+  draft (Phases 2, 5).
+- **A question is saved with its options,** always 2–6 of them with exactly one correct
+  answer, so a half-built question can't exist (Phase 5).
+- **Once a student starts a quiz, its scoring rules are locked:** the questions, points,
+  negative marking and time limit.
+  - The title, description, dates and classes stay editable.
+  - Edits and a first start lock the quiz row, so they can't interleave (Phases 2, 5, 6).
+
+**Attempts and the timer**
+- **One attempt per student per quiz,** enforced by a unique index. Two simultaneous starts
+  end up in the same attempt (Phases 2, 7).
+- **The server's clock decides everything.** An attempt's deadline is the time limit, cut
+  short by the quiz's closing time, and it's fixed when the attempt starts.
+  - The human chose that a later change to the closing date doesn't move the deadline of an
+    attempt already running (Phase 6).
+- **Answers are saved as they're tapped,** one at a time under the attempt's row lock.
+  - Nothing is accepted after the deadline or after a submit, and there's no grace period.
+  - The page's countdown errs on the early side (Phases 7, 8).
+- **Expiry is recorded lazily.** An attempt whose time ran out is ended and scored the next
+  time the student or the teacher looks. There's no background job (Phases 2, 8, 9, 10).
+
+**Scoring and results**
+- **A score is computed only when an attempt ends,** in one function
+  (`finalizeAttempt`). It counts in whole hundredths of a point, so there's no rounding
+  (Phase 9).
+- **Students see only their own score, and only after they finish.**
+  - Students are never shown the correct answers.
+  - Teachers see totals per question, not each student's choices.
+  - See Phases 7, 9 and 10.
+- **The database is the last line of defence.** Its CHECK constraints and unique indexes
+  refuse:
+  - a submission after the deadline
+  - a finished attempt without a score
+  - a score outside 0 to the maximum
+  - a second attempt
+  - a second correct option
+
+  See Phases 2, 8 and 9.
+
+**Interface**
+- **Arabic and right to left, built for phones.**
+  - Quiz content uses `dir="auto"`, so English quizzes read correctly.
+  - API errors are translated into Arabic.
+  - It was checked at 375px and 320px widths, for contrast, and with screen readers in mind
+    (web frontend section, Phase 11).
+- **Saving answers survives a phone network.**
+  - A lost response is retried, not undone, and the server always ends with the last tap.
+  - Submitting waits for saves still in flight (Phase 7).
+
+**Project**
+- **An npm workspaces monorepo:** the NestJS API and the Next.js web app. Only Postgres runs
+  in Docker (Phase 1).
+- **Setup is one command after `npm install`:** `npm run setup`. Then `npm run dev` starts
+  both apps (Phase 15).
+
+### Things intentionally omitted
+
+- **Account management:** sign-up, password reset, and screens for adding students or moving
+  them between classes (Phases 2, 4).
+- **Quiz-editing extras:** deleting a quiz, unpublishing, and reordering questions (Phase 5).
+- **Question variety:** shuffled questions or options, and multi-select questions (Phase 2).
+- **Retakes, and a grace period after the deadline** (Phases 2, 7, 8).
+- **Showing correct answers after a quiz, and per-student answer review for teachers**
+  (Phases 7, 10).
+- **Analytics:** exports, charts and trends across quizzes (Phase 10).
+- **Pagination,** unnecessary at this scale (Phase 6).
+- **Infrastructure:** background jobs, Redis, queues and microservices, per the brief. Also
+  Docker images and deployment configuration for the two apps (Phases 1, 2).
+- **Refresh tokens and server-side logout.** A token lasts 12 hours (Phases 4, 12).
+- **Interface extras:** a dark theme, and one question per screen (web frontend section,
+  Phase 7).
+
+### Features built beyond the brief, and why
+
+- **The draft and publish step:** without it, a quiz whose opening date had passed would be
+  visible while its teacher was still writing it (Phase 2).
+- **Clearing an answer:** when wrong answers cost points, a student must be able to take a
+  guess back (Phase 7).
+- **A login throttle:** without it, passwords could be guessed online without limit. It was
+  deferred in Phase 4 and built in the Phase 12 security review (Phases 4, 12).
+- **Web unit tests** for the security helpers the web app enforces itself, using Node's
+  built-in runner with no new dependencies (Phase 13).
+- **A demo at the brief's real size, with past results,** so every screen can be seen
+  populated straight after setup (Phase 14).
+- **`npm run setup` and `npm run dev`:** the brief allows "one-command or clear local setup",
+  and a single command is the more reliable path for a reviewer on a fresh machine
+  (Phase 15).
+
+### Known limitations
+
+- **No account management.** Nour can't add or move students from the app. Today that means
+  editing the database or the seed (Phase 4).
+- **An answer that never reaches the server is lost.** If a phone stays offline until the
+  time runs out, the answers it couldn't send don't count. The page shows them as "not saved
+  yet, retrying" (Phase 7).
+- **Logging out doesn't revoke the token.** It's forgotten by the browser but stays valid
+  for its 12 hours (Phase 12).
+- **The login throttle lives in the API's memory.** A restart forgets it, and it only works
+  with one API process. Someone who mistypes a classmate's username can make them wait up to
+  30 seconds (Phase 12).
+- **Any teacher can see a class's student list,** by assigning a quiz to it, because
+  teachers aren't linked to classes (Phase 12).
+- **Deeply nested JSON gives a 500,** a framework limit with no effect beyond a log line
+  (Phase 12).
+- **No security headers** such as `X-Frame-Options`. They're better set at deployment
+  (Phase 12).
+- **Teacher edit routes lock a quiz row before checking its owner.** Another teacher could
+  briefly delay students starting it, but only if they knew its id, which is never shown to
+  them (Phase 12).
+- **Some code has no automated tests:**
+  - The pages, which were checked with headless-browser scripts and `curl`. The security
+    helpers they use are unit-tested.
+  - The web login route's cookie handling (Phases 7, 11, 12, 13).
+  - The seed, which was checked against a scratch database instead (Phase 14).
+- **Accessibility gaps:**
+  - English quiz content is read with the Arabic screen-reader voice.
+  - Focus doesn't move to the confirmation after saving in the teacher's editor
+    (Phase 11).
+- **Light theme only** (web frontend section).
+- **The first start needs Google Fonts.** The first build or start downloads the Arabic
+  font. In the Phase 15 fresh-clone test the download timed out once, and every page
+  returned 500. Restarting the web app with its `.next` folder deleted fixed it (web
+  frontend section, Phase 15).
+- **The demo's dates are relative to the day the seed runs,** so the seed should be re-run
+  before a demo (Phase 14).
+- **`npm run setup` and `npm run dev` were tested on Windows only.** They use only Node and
+  Docker commands, so they should work the same on macOS and Linux, but that wasn't checked
+  (Phase 15).
+- **`npm run dev:web` on its own doesn't fix its port.** If 3000 is taken, Next.js moves to
+  the next free port, which can be the API's 3001. `npm run dev` fixes the port. Pinning it in
+  the web app's own scripts, with clearer errors when the API can't be reached, is the
+  separate login-failure fix the human asked to keep on its own branch (web frontend
+  section).
+
+### Possible next-week improvements
+
+In order of value to the centre:
+
+1. **Account management for Nour:** an admin role, adding students and teachers (or
+   importing a class list from a spreadsheet), moving students between classes, and
+   resetting passwords.
+2. **Deployment:**
+   - Dockerfiles for the API and the web app, and HTTPS
+   - security headers
+   - a managed `JWT_SECRET`
+   - database backups
+3. **Teacher conveniences:**
+   - duplicating, deleting or unpublishing a quiz
+   - reordering questions
+   - exporting results to a spreadsheet
+   - reviewing each student's answers
+4. **Offline safety for answers:** keep unsent answers in the browser, and send them when
+   the connection returns, if the attempt is still running.
+5. **Browser end-to-end tests** (for example Playwright) for the student and teacher flows,
+   replacing the one-off headless scripts.
+6. **Self-host the Arabic font** (`next/font/local`, it's openly licensed), so a fresh setup
+   doesn't depend on reaching Google Fonts.
+7. **After a quiz closes,** optionally show students the correct answers.
+8. **If the API ever runs as more than one process:** a shared login throttle, and token
+   revocation on logout.
+
+---
+
+# Phase-by-phase log
 
 ## Phase 1 — Project foundation
 
@@ -20,8 +249,9 @@ progresses through each phase.
   reads `DATABASE_URL` from the environment.
 - **One `.env.example` per place that reads it.** The root one holds the Postgres credentials
   `docker-compose.yml` uses; `apps/api/.env.example` holds `DATABASE_URL`/`JWT_SECRET`/`API_PORT`;
-  `apps/web/.env.example` holds `NEXT_PUBLIC_API_URL`. Each app runs from its own directory,
-  so a single root `.env` would not be picked up by the apps.
+  `apps/web/.env.example` holds `NEXT_PUBLIC_API_URL` (later replaced by the server-only
+  `API_URL`; see the web frontend section). Each app runs from its own directory, so a single
+  root `.env` would not be picked up by the apps.
 - Both generated apps keep their scaffold defaults (Turbopack for Next.js, Nest's stock
   `tsconfig.json`). Build failures during setup turned out to come from a corrupted
   `node_modules` after interrupted installs, not from the defaults; a clean install fixed them.
@@ -173,7 +403,9 @@ the end of the init migration (listed at the top of the schema file).
 
 - **Throttling repeated login attempts** → Phase 12 (security review).
 - **Allowing the web app's origin (CORS)** → Phase 7, when the web app first calls the API.
-- **Login page** → Phase 7.
+  *Later dropped: the web app calls the API from its own server, so CORS isn't needed (web
+  frontend section).*
+- **Login page** → Phase 7. *Built earlier, in the web frontend section.*
 
 ## Phase 5 — Teacher quiz management
 
@@ -225,6 +457,62 @@ All routes require the TEACHER role and act only on the caller's own quizzes.
 
 - Deleting a quiz, unpublishing, and reordering questions. The brief doesn't ask for them.
   Each would be a small addition.
+
+## Between Phases 5 and 6 — Web frontend for the current API
+
+Built before Phase 6 at the user's request, so everything the API supports can be tested
+end to end in a browser. It covers login and logout for both roles, routing by role, and full
+teacher quiz management. The student area is a welcome page until Phases 6–9 add its API.
+
+### Decisions
+
+- **The login token lives in an httpOnly cookie that page JavaScript can't read.**
+  - The browser only calls this app's own `/api/*` routes. `app/api/auth/login` logs in
+    through the API and sets the cookie, and `app/api/[...path]` forwards everything else to
+    the NestJS API with the token attached. The browser never sees the JWT, so an XSS bug
+    couldn't steal it.
+  - The API still does every authorization check; the forwarding route is only transport.
+  - No CORS is needed. The earlier "CORS in Phase 7" note in the Phase 4 section is dropped.
+  - CSRF: the cookie is `SameSite=Lax`, and requests that change data must be
+    `application/json`, which another site can't send without CORS approval.
+  - *Phase 12 found and fixed three gaps in this design:*
+    - *a case-changed `/api/Auth/login` path returned the raw token*
+    - *logout accepted a cross-site form*
+    - *a tab character got past the return-path check*
+- **Who the user is gets decided on the server.** The `/teacher` and `/student` layouts ask
+  the API (`GET /auth/me`) and redirect before rendering. A student who opens `/teacher`
+  lands on `/student`. `proxy.ts` only sends visitors without a session cookie to
+  `/login?from=…`, and the return path only accepts same-site paths.
+- **The interface is in Arabic and right-to-left.** Quiz text, names and options use
+  `dir="auto"`, so an English quiz still reads correctly. Dates show Arabic month names in
+  the form used in Jordan (e.g. "8 تشرين الأول"), with Western digits.
+- **Teachers enter dates in their browser's local time**, and they're sent to the API with
+  an explicit timezone (ISO `…Z`), as the API requires.
+- **API errors are translated.** The API answers in English. `lib/messages.ts` maps its fixed
+  messages (publish problems, the lock, option rules…) to Arabic; anything unknown falls
+  back to an Arabic message for the HTTP status.
+- **The client mirrors the API's form rules** (for fast feedback). Each error appears at
+  its field and focus moves to the first invalid one. The API remains the authority.
+- **`API_URL` (server-only) replaces `NEXT_PUBLIC_API_URL`.** Only the Next.js server calls
+  the API, so the address never needs to reach the browser.
+- **Visual design:** one font family (IBM Plex Sans Arabic), cool paper-like neutrals and
+  one green accent. The recurring motif is the answer-sheet bubble: the logo, and option
+  letters أ ب ج د, with the correct one filled. Touch targets are at least 44px.
+
+### Built beyond the brief (and why)
+
+- **The login page arrived earlier than Phase 7**, as part of this frontend pass.
+
+### Known limitations
+
+- **Light theme only.**
+- **No automated frontend tests.** The brief prioritises backend tests, and every rule is
+  enforced (and tested) in the API. The UI was checked by driving a headless browser at a
+  375px phone viewport and reviewing screenshots of each screen, plus horizontal-overflow
+  and console-error checks. *Corrected in Phase 13: the web app enforces a few security
+  rules itself, and those now have unit tests.*
+- **The first build needs internet access**, to download the font (`next/font` then
+  serves it from the app itself).
 
 ## Phase 6 — Quiz availability
 
@@ -830,53 +1118,75 @@ one: it deletes all data. Then:
   (scoring, deadlines, the CHECK constraints) are already tested, and it was checked as
   described above.
 
-## Between Phases 5 and 6 — Web frontend for the current API
-
-Built before Phase 6 at the user's request, so everything the API supports can be tested
-end to end in a browser. It covers login and logout for both roles, routing by role, and full
-teacher quiz management. The student area is a welcome page until Phases 6–9 add its API.
+## Phase 15 — Documentation
 
 ### Decisions
 
-- **The login token lives in an httpOnly cookie that page JavaScript can't read.**
-  - The browser only calls this app's own `/api/*` routes. `app/api/auth/login` logs in
-    through the API and sets the cookie, and `app/api/[...path]` forwards everything else to
-    the NestJS API with the token attached. The browser never sees the JWT, so an XSS bug
-    couldn't steal it.
-  - The API still does every authorization check; the forwarding route is only transport.
-  - No CORS is needed. The earlier "CORS in Phase 7" note in the Phase 4 section is dropped.
-  - CSRF: the cookie is `SameSite=Lax`, and requests that change data must be
-    `application/json`, which another site can't send without CORS approval.
-- **Who the user is gets decided on the server.** The `/teacher` and `/student` layouts ask
-  the API (`GET /auth/me`) and redirect before rendering. A student who opens `/teacher`
-  lands on `/student`. `proxy.ts` only sends visitors without a session cookie to
-  `/login?from=…`, and the return path only accepts same-site paths.
-- **The interface is in Arabic and right-to-left.** Quiz text, names and options use
-  `dir="auto"`, so an English quiz still reads correctly. Dates show Arabic month names in
-  the form used in Jordan (e.g. "8 تشرين الأول"), with Western digits.
-- **Teachers enter dates in their browser's local time**, and they're sent to the API with
-  an explicit timezone (ISO `…Z`), as the API requires.
-- **API errors are translated.** The API answers in English. `lib/messages.ts` maps its fixed
-  messages (publish problems, the lock, option rules…) to Arabic; anything unknown falls
-  back to an Arabic message for the HTTP status.
-- **The client mirrors the API's form rules** (for fast feedback). Each error appears at
-  its field and focus moves to the first invalid one. The API remains the authority.
-- **`API_URL` (server-only) replaces `NEXT_PUBLIC_API_URL`.** Only the Next.js server calls
-  the API, so the address never needs to reach the browser.
-- **Visual design:** one font family (IBM Plex Sans Arabic), cool paper-like neutrals and
-  one green accent. The recurring motif is the answer-sheet bubble: the logo, and option
-  letters أ ب ج د, with the correct one filled. Touch targets are at least 44px.
+- **One-command setup**, chosen by the human over documented steps alone.
+  - `npm run setup` ([`scripts/setup.mjs`](./scripts/setup.mjs)) does four things:
+    - creates each missing `.env` from its example
+    - starts Postgres and waits until it's healthy (`docker compose up -d --wait`)
+    - applies the migrations
+    - loads the demo
+  - `npm run dev` ([`scripts/dev.mjs`](./scripts/dev.mjs)) starts Postgres if needed, then
+    the API and the web app together.
+  - Both are plain Node scripts with no new dependencies and no shell-specific commands, so
+    they should behave the same on Windows, macOS and Linux. They were tested on Windows
+    only.
+  - `docker-compose.yml` changed only in its health check (below).
+- **Setup never overwrites an existing `.env`,** so someone who changed a port keeps their
+  change.
+- **Setup applies migrations with `migrate deploy`, not `migrate dev`.** Deploy never creates
+  a new migration or asks a question, so it's safe to run on any clone.
+- **`npm run dev` runs npm's entry point with the current Node**, instead of spawning `npm`
+  through a shell, which avoids one extra shell on Windows.
+  - npm still runs each app's own script through the system shell.
+  - Ctrl+C in a terminal is delivered to every process started from it, so it should stop
+    both apps. The review agreed, but it wasn't tried by hand: the tests stopped the apps by
+    their process ids.
+- **`npm run dev` fixes the web app's port to 3000.** Found in review: if 3000 was taken,
+  Next.js moved to the next free port, 3001, before the API (which takes a few seconds to
+  build) could start there. The API then failed and the web app talked to itself. Now the
+  web app stops with "address already in use", and the script says which app stopped.
+  - Only `npm run dev` fixes the port. Doing the same in the web app's own scripts belongs to
+    the separate login-failure fix, which the human asked to keep on its own branch.
+- **Postgres's health check now connects over TCP** (`pg_isready -h 127.0.0.1`). On its very
+  first start, Postgres briefly runs a socket-only server while it initialises. The old
+  check could report that as healthy, and setup's migrations would then fail to connect.
+- **Setup always loads the demo**, which deletes the development data, and it says so on
+  screen as it does. Running it again is the documented way to reset the demo. It's for a
+  machine's first setup.
+- **This file and `AI_USAGE.md` got a summary on top**, under the brief's headings, chosen by
+  the human over rewriting them by topic. The phase logs stay below as the detailed record.
+  - The web frontend section moved to its place in time, between Phases 5 and 6.
+  - A few log lines that later phases overtook got a short note instead of being rewritten.
+- **The two app READMEs** were still the generators' boilerplate, with commands that don't
+  apply here. They now point to the root README and describe their own folders.
 
-### Built beyond the brief (and why)
+### How it was checked
 
-- **The login page arrived earlier than Phase 7**, as part of this frontend pass.
+A fresh clone of this branch, in a scratch folder, was taken through the README. This
+machine already has a PostgreSQL on port 5432, so the README's steps for a taken port were
+followed first, using 5434.
 
-### Known limitations
-
-- **Light theme only.**
-- **No automated frontend tests.** The brief prioritises backend tests, and every rule is
-  enforced (and tested) in the API. The UI was checked by driving a headless browser at a
-  375px phone viewport and reviewing screenshots of each screen, plus horizontal-overflow
-  and console-error checks.
-- **The first build needs internet access**, to download the font (`next/font` then
-  serves it from the app itself).
+- **`npm install`, then `npm run setup` twice.**
+  - The first run created the missing `.env`, started Postgres, applied the three
+    migrations and loaded the demo.
+  - The second run left every `.env` alone, had no pending migrations, and reset the demo.
+- **`npm run dev` served both apps.** Checks through the web app, the way a browser uses
+  it:
+  - logging in as a student and as a teacher
+  - the role redirects
+  - the pages
+  - the `/api/*` proxy
+  - the README's `curl` example against the API
+- **The font download failed once.** On the first start, the Arabic font download timed out
+  and every page returned 500. After a restart with `.next` deleted, it worked. That's now
+  in the README's prerequisites and under known limitations.
+- **`npm test` in the fresh clone:** 55 API unit, 201 API e2e and 15 web tests, all passing.
+- **After the review's fixes:**
+  - Setup was run again on an emptied Postgres volume, so the new health check was tested on
+    a database's first start.
+  - `npm run dev` was run with port 3000 already taken: the web app stopped with "address
+    already in use", the API kept 3001, and the script said which app stopped.
+  - `npm run dev` then worked normally.
