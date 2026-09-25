@@ -99,7 +99,7 @@ export default function AttemptResultPage() {
         </p>
       )}
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-xl border border-line bg-surface p-4">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-1 min-[360px]:grid-cols-[auto_1fr] min-[360px]:gap-y-2 rounded-xl border border-line bg-surface p-4">
         <Fact label="الإجابات">
           أجبت عن <bdi>{attempt.answeredCount}</bdi> من{" "}
           <bdi>{attempt.quiz.questionCount}</bdi>
@@ -142,7 +142,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-ink-muted">{label}</dt>
-      <dd>{children}</dd>
+      <dd className="max-[359px]:mb-2">{children}</dd>
     </>
   );
 }

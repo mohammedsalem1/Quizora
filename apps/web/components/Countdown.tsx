@@ -13,19 +13,21 @@ function formatRemaining(ms: number) {
 }
 
 export function Countdown({ remainingMs }: { remainingMs: number }) {
+  // The last five minutes and the last minute are marked by colour and a tinted background,
+  // so they stand out at a glance (and are announced by the page).
   const tone =
     remainingMs <= 60_000
-      ? "text-danger"
+      ? "bg-danger-soft text-danger"
       : remainingMs <= 5 * 60_000
-        ? "text-warn"
+        ? "bg-warn-soft text-warn"
         : "text-ink";
   return (
-    <span className="flex items-baseline gap-2">
+    <span className="flex items-baseline gap-2 whitespace-nowrap">
       <span className="text-sm text-ink-muted">الوقت المتبقي</span>
       <span
         role="timer"
         dir="ltr"
-        className={`text-xl font-semibold tabular-nums ${tone}`}
+        className={`rounded-md px-2 text-xl font-semibold tabular-nums ${tone}`}
       >
         {formatRemaining(remainingMs)}
       </span>

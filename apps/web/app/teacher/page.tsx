@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ClassNames } from "@/components/ClassNames";
 import { quizStatus, QuizStatusBadge } from "@/components/QuizStatusBadge";
 import { buttonClass, ErrorList } from "@/components/ui";
 import { apiFetch, errorMessagesOf } from "@/lib/api";
@@ -69,8 +70,7 @@ export default function TeacherQuizzesPage() {
                 </span>
                 <span className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
                   <span>
-                    الصفوف:{" "}
-                    <bdi>{quiz.classes.map((c) => c.name).join("، ")}</bdi>
+                    الصفوف: <ClassNames classes={quiz.classes} />
                   </span>
                   <span>
                     {quiz.questionCount === 0

@@ -35,5 +35,6 @@ export function formatDateTime(iso: string): string {
   const date = new Date(iso);
   const format =
     date.getFullYear() === new Date().getFullYear() ? THIS_YEAR : OTHER_YEAR;
-  return format.format(date);
+  // Keep "5:46" and its "ص"/"م" together on narrow screens.
+  return format.format(date).replace(/ (ص|م)$/, "\u00a0$1");
 }

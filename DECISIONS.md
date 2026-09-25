@@ -573,6 +573,56 @@ The rules were agreed in Phase 2. The code is `scoreAttempt()` in
   asked for it, and it would be a small addition.
 - **Exports, charts and trends across quizzes**, per "no unnecessary analytics".
 
+## Phase 11 — Arabic & mobile UX
+
+The interface was already Arabic, right-to-left and built for phones. This phase audited it
+at 375px and 320px (small phones) and fixed what fell short of the brief.
+
+### Decisions
+
+- **Every page has its own title**, for example "نتيجة الاختبار | Quizora". Screen readers
+  announce a page change only when the title changes, and before this every page was
+  titled "Quizora".
+- **Focus follows what the student is doing.**
+  - Opening or cancelling the start and submit confirmations moves focus to the
+    confirmation, or back to the button.
+  - "مسح الإجابة" moves focus to the question's options, since the button itself disappears.
+  - The forms render their errors before moving focus to the first invalid field, so the
+    error is read out with the field.
+- **Contrast** now meets WCAG AA:
+  - Busy buttons ("جارٍ حفظ الإجابات…") use a grey background with white text (5.8:1).
+  - Input borders are dark enough to find (3.8:1).
+- **Small phones:**
+  - Long unbroken words wrap instead of widening the page (`overflow-wrap: anywhere`).
+  - Buttons never break inside a word.
+  - Below 360px, the header shows only the logo's bubbles, so the user's name fits.
+  - Label and value pairs stack.
+  - A time stays together with its "ص/م".
+- **Right-to-left details:**
+  - Each class name in a list is isolated on its own, so "10A، 10B" reads in the right order
+    with the comma on the right side. The class picker no longer forces left-to-right.
+  - The teacher results page numbers questions 1, 2, 3 like every other screen, instead of
+    by stored position, which has gaps after a deletion.
+- **Arabic counts** use `Intl.PluralRules("ar")`, so 100 and 103–110 take the right noun
+  form ("100 سؤال", "105 دقائق").
+- **The timer is clearer.** In the last 5 minutes the time sits on an amber background, and
+  in the last minute on a red one. Screen readers already announced both moments. On small
+  phones the timer bar never wraps.
+- **Also fixed:**
+  - Back links meet the 44px touch target.
+  - The zero-floor rule ("the quiz score never goes below zero") is stated before and during
+    the quiz, not only on the result page.
+  - The teacher's question preview keeps line breaks.
+  - The results page says "أجاب عن N من M", and no longer claims "nobody finished" when
+    attempts exist that have no score.
+
+### Deliberately left out
+
+- **Reading English quiz content with the English screen-reader voice** (`lang="en"`). It
+  needs detecting each text's language, and the quiz is still usable without it.
+- **Moving focus after saving in the teacher editor.** The confirmations appear, but focus
+  isn't moved to them.
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested

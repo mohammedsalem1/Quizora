@@ -16,7 +16,12 @@ export function LogoutButton() {
   }
 
   return (
-    <Button variant="quiet" onClick={logout} disabled={pending}>
+    <Button
+      variant="quiet"
+      className="shrink-0"
+      onClick={logout}
+      disabled={pending}
+    >
       خروج
     </Button>
   );

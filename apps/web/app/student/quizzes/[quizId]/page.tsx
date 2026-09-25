@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { keyDate, StudentQuizStateBadge } from "@/components/StudentQuizState";
 import { Alert, Button, buttonClass, ErrorList } from "@/components/ui";
 import { ApiError, apiFetch, errorMessagesOf } from "@/lib/api";
@@ -17,6 +17,15 @@ export default function StudentQuizPage() {
   const [quiz, setQuiz] = useState<StudentQuiz | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // The confirmation replaces the start button and the other way round: keep focus with them.
+  const confirmText = useRef<HTMLParagraphElement>(null);
+  const startButton = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
+  useEffect(() => {
+    if (confirming && !wasConfirming.current) confirmText.current?.focus();
+    if (!confirming && wasConfirming.current) startButton.current?.focus();
+    wasConfirming.current = confirming;
+  }, [confirming]);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string[] | null>(null);
 
@@ -86,7 +95,7 @@ export default function StudentQuizPage() {
         )}
       </header>
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-xl border border-line bg-surface p-4">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-1 min-[360px]:grid-cols-[auto_1fr] min-[360px]:gap-y-2 rounded-xl border border-line bg-surface p-4">
         <Fact label="الأسئلة">{countLabel(quiz.questionCount, QUESTIONS)}</Fact>
         <Fact label="المجموع">{countLabel(quiz.totalPoints, POINTS)}</Fact>
         <Fact label="المدة">{countLabel(quiz.timeLimitMinutes, MINUTES)}</Fact>
@@ -95,7 +104,8 @@ export default function StudentQuizPage() {
           {quiz.negativeMarkPercent > 0 ? (
             <>
               كل إجابة خاطئة تُنقص <bdi>{quiz.negativeMarkPercent}%</bdi> من
-              علامة سؤالها. السؤال المتروك لا يُنقص شيئاً.
+              علامة سؤالها. السؤال المتروك لا يُنقص شيئاً، ولا تقلّ علامة
+              الاختبار عن صفر.
             </>
           ) : (
             "لا تُنقص الإجابات الخاطئة شيئاً."
@@ -122,7 +132,11 @@ export default function StudentQuizPage() {
           <ErrorList messages={startError} />
           {confirming ? (
             <div className="flex flex-col gap-3 rounded-lg bg-accent-soft p-4">
-              <p className="font-medium">
+              <p
+                ref={confirmText}
+                tabIndex={-1}
+                className="font-medium focus:outline-none"
+              >
                 هل أنت مستعد؟ سيبدأ الوقت الآن ولا يمكن إيقافه.
               </p>
               <div className="flex flex-wrap gap-3">
@@ -139,7 +153,11 @@ export default function StudentQuizPage() {
               </div>
             </div>
           ) : (
-            <Button className="self-start" onClick={() => setConfirming(true)}>
+            <Button
+              ref={startButton}
+              className="self-start"
+              onClick={() => setConfirming(true)}
+            >
               ابدأ الاختبار
             </Button>
           )}
@@ -200,7 +218,7 @@ function Page({ children }: { children: ReactNode }) {
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
       <Link
         href="/student"
-        className="self-start rounded-lg py-2 text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+        className="inline-flex min-h-11 items-center self-start rounded-lg text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
       >
         العودة إلى اختباراتي
       </Link>
@@ -213,7 +231,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-ink-muted">{label}</dt>
-      <dd>{children}</dd>
+      <dd className="max-[359px]:mb-2">{children}</dd>
     </>
   );
 }

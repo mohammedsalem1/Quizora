@@ -10,7 +10,9 @@ const plexArabic = IBM_Plex_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: "Quizora",
+  // Each page sets its own title, e.g. "نتيجة الاختبار | Quizora". Screen readers announce
+  // a page change when the title changes, so every route needs a different one.
+  title: { default: "Quizora", template: "%s | Quizora" },
   description: "اختبارات قصيرة لطلاب المركز",
 };
 
