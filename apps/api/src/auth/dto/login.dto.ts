@@ -1,11 +1,13 @@
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { NoNul } from '../../common/no-nul';
 
 export class LoginDto {
   // Case-insensitive: phone keyboards often capitalise the first letter.
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
+  @NoNul() // the username is looked up in the database
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)

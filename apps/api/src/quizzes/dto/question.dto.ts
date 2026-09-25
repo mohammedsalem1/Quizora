@@ -12,10 +12,12 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { NoNul } from '../../common/no-nul';
 import { Trim } from '../../common/trim';
 
 export class OptionDto {
   @Trim()
+  @NoNul()
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
@@ -30,6 +32,7 @@ export class OptionDto {
 // "no duplicate option texts" are checked in TeacherQuizzesService.
 export class QuestionDto {
   @Trim()
+  @NoNul()
   @IsString()
   @IsNotEmpty()
   @MaxLength(2000)

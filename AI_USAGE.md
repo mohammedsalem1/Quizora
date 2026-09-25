@@ -466,3 +466,51 @@ Honest account of how AI tools were used on this project. Updated as work progre
   own servers' command lines. The AI started Docker Desktop and the project's Postgres
   container, as the README does, to run the test suite. It didn't restart the human's dev
   servers.
+
+## Phase 12 — Security & edge cases
+
+- **Order.** The human first asked for Phase 13. The AI pointed out that Phase 12 hadn't been
+  done and that the brief says not to skip phases. The human chose to do Phase 12 first.
+- **Process.** Security is on the human's high-risk list, so the AI used four read-only
+  review agents, the top of the normal range, and no mutation testing. Each agent tried to
+  break one area:
+  - login, tokens, the cookie and the web proxy
+  - authorization across every route
+  - input validation
+  - the business rules
+
+  The AI turned every claim into a failing test, or a real request against its own servers,
+  before fixing it. Claims it couldn't reproduce weren't fixed.
+- **What was confirmed and fixed** (details in `DECISIONS.md`):
+  - online password guessing, answered with a per-username slowdown
+  - an open redirect after login, using a tab character
+  - the password landing in the URL if the form is submitted before its JavaScript loads
+  - cross-site logout
+  - the raw token reachable through `/api/Auth/login`
+  - a NUL character causing a 500, even on login
+  - dates that passed validation but caused a 500 or were stored unreadably
+  - unbounded request bodies in the web proxy
+  - the example JWT secret being accepted in production
+
+  Two authorization and business-rule reviews found nothing that needed fixing.
+- **Accepted, not fixed:** deeply nested JSON (a framework 500 with no effect), taking a lock
+  before the ownership check, the lack of a composite foreign key, security headers, stateless
+  logout, and teachers seeing class lists by design. The reasons are in `DECISIONS.md`.
+- **How it was checked:**
+  - The new `security.e2e-spec.ts` (20 tests) walks through the brief's list: every
+    protected route without a token and with the wrong role, cross-teacher changes leaving
+    the database unchanged, late submission, a second attempt, a fake score, wrong IDs,
+    malformed bodies, NUL characters, bad dates, and password guessing.
+  - 6 unit tests cover the throttle, with a controllable clock.
+  - The web fixes have no automated tests, so they were checked with `curl` against the
+    AI's own servers: open redirect, form method, logout, `/api/Auth/login`, a 200 KB body
+    both plain and chunked, six wrong logins, and a normal login.
+  - One full test run: 50 unit and 189 e2e tests.
+- **Mistakes caught along the way:**
+  - Two of the AI's new tests were wrong at first, not the app:
+    - One broke because an earlier test in the same file had locked a quiz. It now uses a
+      fresh quiz.
+    - One expected `__proto__` to be rejected with 400. It is safely dropped instead, so the
+      test now checks it's dropped and nothing is polluted.
+  - A scripted edit of the date pattern silently failed to match because of regex escaping.
+    The AI noticed and made the change with an exact edit instead.

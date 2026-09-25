@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { readLimitedBody } from "@/lib/body";
 import { API_URL, SESSION_COOKIE } from "@/lib/config";
 
 // Forwards /api/<path> to the NestJS API at /<path>, adding the JWT from the httpOnly
@@ -10,6 +11,12 @@ async function forward(
   const { path } = await ctx.params;
   if (path.some((segment) => segment === "." || segment === "..")) {
     return NextResponse.json({ message: "Invalid path" }, { status: 400 });
+  }
+  // Logging in and out have their own routes (they keep the token in the cookie). The API's
+  // paths ignore letter case, so /api/Auth/login would otherwise reach the API's login here
+  // and hand the raw token to the browser.
+  if (path[0]?.toLowerCase() === "auth") {
+    return NextResponse.json({ message: "Not found" }, { status: 404 });
   }
 
   const sendsBody = request.method !== "GET" && request.method !== "DELETE";
@@ -31,6 +38,11 @@ async function forward(
     API_URL,
   );
 
+  const body = sendsBody ? await readLimitedBody(request) : undefined;
+  if (body === null) {
+    return NextResponse.json({ message: "Request too large" }, { status: 413 });
+  }
+
   let apiResponse: Response;
   try {
     apiResponse = await fetch(url, {
@@ -39,7 +51,7 @@ async function forward(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(sendsBody ? { "Content-Type": "application/json" } : {}),
       },
-      body: sendsBody ? await request.text() : undefined,
+      body,
       cache: "no-store",
     });
   } catch {

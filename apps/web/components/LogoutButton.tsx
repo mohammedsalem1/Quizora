@@ -10,7 +10,11 @@ export function LogoutButton() {
 
   async function logout() {
     setPending(true);
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    // JSON, like every change: another website can't send that (see the logout route).
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => null);
     router.replace("/login");
     router.refresh();
   }

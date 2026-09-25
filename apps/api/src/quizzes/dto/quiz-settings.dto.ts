@@ -15,18 +15,24 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { NoNul } from '../../common/no-nul';
 import { Trim } from '../../common/trim';
 
 // Dates must carry an explicit timezone ("Z" or "+03:00"). Without one, "09:00" would be
 // interpreted in the server's timezone, which may not be Amman's.
-const WITH_TIMEZONE = /(Z|[+-]\d{2}:\d{2})$/;
+//
+// Only calendar dates with a time (2026-10-01T09:00, seconds optional). ISO week and ordinal
+// dates (2026-W40-4, 2026-274) are valid ISO 8601 too, but JavaScript can't parse them.
+const WITH_TIMEZONE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 const TIMEZONE_MESSAGE =
-  '$property must include a timezone, e.g. 2026-10-01T09:00:00+03:00';
+  '$property must be a date and time with a timezone, e.g. 2026-10-01T09:00:00+03:00';
 
 const MAX_TIME_LIMIT_MINUTES = 300;
 
 export class CreateQuizDto {
   @Trim()
+  @NoNul()
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
@@ -34,6 +40,7 @@ export class CreateQuizDto {
 
   @IsOptional()
   @Trim()
+  @NoNul()
   @IsString()
   @MaxLength(2000)
   description?: string | null;
@@ -73,6 +80,7 @@ const isSent = (_: object, value: unknown) => value !== undefined;
 export class UpdateQuizDto {
   @ValidateIf(isSent)
   @Trim()
+  @NoNul()
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
@@ -80,6 +88,7 @@ export class UpdateQuizDto {
 
   @IsOptional() // null clears the description
   @Trim()
+  @NoNul()
   @IsString()
   @MaxLength(2000)
   description?: string | null;

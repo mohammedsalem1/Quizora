@@ -302,7 +302,18 @@ function assertNoAttempts(attemptCount: number) {
   if (attemptCount > 0) throw new ConflictException(LOCKED_MESSAGE);
 }
 
+// The last moment Postgres can store and still hand back as a readable date: a later one
+// (year 10000 in UTC) would be saved, then come back as an invalid date.
+const LATEST_DATE = Date.UTC(9999, 11, 31, 23, 59, 59);
+
 function assertWindow(opensAt: Date, closesAt: Date) {
+  for (const date of [opensAt, closesAt]) {
+    if (Number.isNaN(date.getTime()) || date.getTime() > LATEST_DATE) {
+      throw new BadRequestException(
+        'Dates must be real dates before the year 10000',
+      );
+    }
+  }
   if (closesAt <= opensAt) {
     throw new BadRequestException('closesAt must be after opensAt');
   }
