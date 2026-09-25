@@ -16,6 +16,8 @@ type StudentQuiz = {
   questionCount: number;
   totalPoints: number;
   state: string;
+  score: number | null;
+  maxScore: number | null;
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -195,6 +197,8 @@ describe('Student quiz availability (e2e)', () => {
         questionCount: 2,
         totalPoints: 5,
         state: 'AVAILABLE',
+        score: null,
+        maxScore: null,
       });
     });
 
@@ -299,6 +303,48 @@ describe('Student quiz availability (e2e)', () => {
       expect(await stateOf(quizId, tokens.a1)).toBe('FINISHED');
     });
 
+    it('shows the student their own score once finished, and none while running', async () => {
+      const done = await createQuiz({ title: 'scored', classIds: [class10A] });
+      const running = await createQuiz({
+        title: 'running',
+        classIds: [class10A],
+      });
+      const finished = await startAttempt(
+        done,
+        studentIds.a1,
+        'SUBMITTED',
+        hoursFromNow(0.25),
+      );
+      await prisma.quizAttempt.update({
+        where: { id: finished.id },
+        data: { score: 3.5 },
+      });
+      await startAttempt(
+        running,
+        studentIds.a1,
+        'IN_PROGRESS',
+        hoursFromNow(0.25),
+      );
+
+      const detail = (
+        await get(`/student/quizzes/${done}`, tokens.a1).expect(200)
+      ).body as StudentQuiz;
+      expect([detail.score, detail.maxScore]).toEqual([3.5, 5]);
+      const listed = new Map((await listFor(tokens.a1)).map((q) => [q.id, q]));
+      expect([listed.get(done)?.score, listed.get(done)?.maxScore]).toEqual([
+        3.5, 5,
+      ]);
+      expect([
+        listed.get(running)?.score,
+        listed.get(running)?.maxScore,
+      ]).toEqual([null, null]);
+      // A classmate sees the quiz, but not a1's score.
+      const classmate = (
+        await get(`/student/quizzes/${done}`, tokens.a2).expect(200)
+      ).body as StudentQuiz;
+      expect([classmate.state, classmate.score]).toEqual(['AVAILABLE', null]);
+    });
+
     it('shows FINISHED once the time is up, whether or not it was finalized yet', async () => {
       const expired = await createQuiz({
         title: 'expired',
@@ -318,6 +364,18 @@ describe('Student quiz availability (e2e)', () => {
         hoursFromNow(-0.01),
       );
       expect(await stateOf(timedOut, tokens.a1)).toBe('FINISHED');
+
+      // Reading it ended and scored the attempt, so its score is there too (0 of 5: no answers).
+      const detail = (
+        await get(`/student/quizzes/${timedOut}`, tokens.a1).expect(200)
+      ).body as StudentQuiz;
+      expect([detail.score, detail.maxScore]).toEqual([0, 5]);
+      const listed = (await listFor(tokens.a1)).find((q) => q.id === timedOut);
+      expect([listed?.score, listed?.maxScore]).toEqual([0, 5]);
+      const row = await prisma.quizAttempt.findFirstOrThrow({
+        where: { quizId: timedOut, studentId: studentIds.a1 },
+      });
+      expect(row.status).toBe('EXPIRED');
     });
 
     it("doesn't affect a classmate who hasn't started", async () => {

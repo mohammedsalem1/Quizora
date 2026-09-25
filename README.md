@@ -9,7 +9,8 @@ students take them once within an open date range, and results are visible after
 > phone and submit, with the deadline enforced by the server (Phase 7). Expired attempts are
 > recorded, and the database itself refuses a late submission (Phase 8). Scores, including
 > per-quiz negative marking, are calculated on the server when an attempt ends (Phase 9).
-> Teacher results come next.
+> Teachers see each quiz's results and basic statistics, and students see their own
+> scores (Phase 10).
 
 ## Stack
 
@@ -53,7 +54,11 @@ Log in at http://localhost:3000 with a sample account (password `Quizora@2026` f
 
 As a teacher: create a quiz (dates, time limit, negative marking, classes), add questions
 and tap the letter of the correct answer, then publish. Other teachers can't open your
-quizzes, and once a student starts a quiz its questions and scoring rules are locked.
+quizzes, and once a student starts a quiz its questions and scoring rules are locked. Open
+"عرض النتائج" on a published quiz to see:
+- each student's status and score, including those who haven't started
+- the average, highest and lowest score
+- how many students got each question right, got it wrong, or left it blank
 
 As a student:
 1. Open a quiz from the list and start it. There's one attempt, and the timer runs on the

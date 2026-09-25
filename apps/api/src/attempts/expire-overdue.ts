@@ -1,9 +1,10 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { finalizeAttempt } from './finalize';
 
-// Ends and scores this student's attempts whose time is up. There's no background job
-// (decided in Phase 2): an attempt is finalized when the server next handles a request from
-// its student. Every student request about quizzes or attempts calls this first, with the
+// Ends and scores attempts whose time is up. There's no background job (decided in Phase 2):
+// an attempt is finalized the next time the server reads it. Every student request about
+// quizzes or attempts runs this for that student, and a teacher's results page runs it for
+// that quiz (so a student who never came back still gets a final score). It always uses the
 // API server's clock.
 //
 // Each attempt is finalized in its own transaction under its row lock, after checking it is
@@ -11,11 +12,11 @@ import { finalizeAttempt } from './finalize';
 // attempt is never turned into an expired one.
 export async function expireOverdueAttempts(
   prisma: PrismaService,
-  studentId: string,
+  scope: { studentId: string } | { quizId: string },
   now: Date,
 ) {
   const overdue = await prisma.quizAttempt.findMany({
-    where: { studentId, status: 'IN_PROGRESS', expiresAt: { lte: now } },
+    where: { ...scope, status: 'IN_PROGRESS', expiresAt: { lte: now } },
     select: { id: true },
   });
 

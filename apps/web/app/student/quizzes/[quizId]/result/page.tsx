@@ -7,12 +7,8 @@ import { Alert, buttonClass } from "@/components/ui";
 import { ApiError, apiFetch, errorMessagesOf } from "@/lib/api";
 import { countLabel, POINTS } from "@/lib/arabic";
 import { formatDateTime } from "@/lib/dates";
+import { formatPoints } from "@/lib/numbers";
 import type { AttemptView } from "@/lib/types";
-
-// "7.5", "7.25", "8": up to two decimals, Western digits like the rest of the interface.
-const SCORE = new Intl.NumberFormat("ar-JO-u-nu-latn", {
-  maximumFractionDigits: 2,
-});
 
 export default function AttemptResultPage() {
   const { quizId } = useParams<{ quizId: string }>();
@@ -91,10 +87,10 @@ export default function AttemptResultPage() {
         <p className="flex items-baseline gap-3 rounded-xl border border-line bg-surface p-4">
           <span className="text-ink-muted">علامتك</span>
           <span className="text-4xl font-semibold text-accent-strong tabular-nums">
-            <bdi>{SCORE.format(attempt.score)}</bdi>
+            <bdi>{formatPoints(attempt.score)}</bdi>
           </span>
           <span className="text-ink-muted">
-            من <bdi>{SCORE.format(attempt.maxScore)}</bdi>
+            من <bdi>{formatPoints(attempt.maxScore)}</bdi>
           </span>
         </p>
       ) : (

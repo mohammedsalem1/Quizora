@@ -371,3 +371,55 @@ Honest account of how AI tools were used on this project. Updated as work progre
       scoring; the zero-floor rule shown only after the attempt; one half of a CHECK untested.
 - **Final checks:** the full suite was run once: 38 unit tests and 158 e2e tests. Lint,
   type-check and the web build were clean.
+
+## Phase 10 — Results & teacher dashboard
+
+- **Plan and assumptions.** The AI read "student performance" as each student's result
+  within each of the teacher's quizzes, with no cross-quiz analytics, and wrote that down as
+  an assumption. It kept the statistics to status counts, the average, highest and lowest
+  score, and right, wrong and blank counts per question. The default review applied (3
+  agents, one on authorization, since authorization is on the human's high-risk list), with
+  no mutation testing.
+- **What the AI wrote:**
+  - the teacher results route, which first ends and scores the quiz's overdue attempts,
+    closing the item deferred from Phases 8–9
+  - pure statistics functions, with 6 unit tests
+  - the student's own score in their quiz list, the quiz page and the result page
+  - 9 e2e tests: a realistic class taking the quiz through the real API (two submitted,
+    one still answering, one not started, and one who left and never came back), with exact
+    statistics and authorization checks
+  - one more e2e test for the student's own score
+  - the teacher results page
+- **How it was checked:**
+  - Targeted tests: the statistics unit tests, then the teacher-results and student-quizzes
+    e2e suites (9 and 18 tests), one after another.
+  - A few read-only screenshots at 375px, through the human's running dev server rather than
+    new servers (no overflow, no console errors). The development data had no finished
+    attempts, so the populated results view is covered by the e2e tests, not by a
+    screenshot. The AI didn't create attempts in the human's data.
+- **Review.** Three read-only agents looked at authorization, correctness and tests. None
+  classified anything MUST FIX NOW. The AI made the final classification and upgraded four
+  items, all cheap and all directly about this phase:
+  - The student quiz list and page read the clock twice, the same slip fixed in Phase 9 for
+    the attempt page. For a few milliseconds a finished quiz could show without its score.
+    Two agents found this.
+  - No test proved that ownership is checked before the expiry step runs, so a later
+    reordering would have let another teacher trigger writes on the quiz.
+  - No test proved that the student's list and quiz page finalize a timed-out attempt and
+    show its score.
+  - No test guarded the teacher results response against leaking account fields such as
+    `passwordHash`. It is the first route that returns other users' records.
+  - **Not fixed now:**
+    - **OPTIONAL:** the per-question counts can disagree with the status counts for a few
+      milliseconds at closing time, until the next refresh; the sort-order test would still
+      pass without sorting.
+    - **LATER PHASE:** the "nobody finished" wording when only pre-scoring attempts exist.
+      This affects development data only.
+  - **FALSE POSITIVE (checked):**
+    - Any teacher can list a class by assigning a quiz to it. The brief has no
+      teacher-to-class ownership.
+    - A teacher's page view racing a student's submit is safe.
+    - A student's score hinting at which answers were right comes with any score, and the
+      brief requires scores to be shown.
+- **Final checks:** the full suite was run once: 44 unit and 169 e2e tests. Lint, type-check
+  and the web build were clean.

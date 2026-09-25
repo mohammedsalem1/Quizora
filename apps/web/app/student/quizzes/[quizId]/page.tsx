@@ -8,6 +8,7 @@ import { Alert, Button, buttonClass, ErrorList } from "@/components/ui";
 import { ApiError, apiFetch, errorMessagesOf } from "@/lib/api";
 import { countLabel, MINUTES, POINTS, QUESTIONS } from "@/lib/arabic";
 import { formatDateTime } from "@/lib/dates";
+import { formatPoints } from "@/lib/numbers";
 import type { StudentQuiz } from "@/lib/types";
 
 export default function StudentQuizPage() {
@@ -155,6 +156,20 @@ export default function StudentQuizPage() {
           </span>
         </Alert>
       )}
+
+      {quiz.state === "FINISHED" &&
+        quiz.score !== null &&
+        quiz.maxScore !== null && (
+          <p className="flex items-baseline gap-3 rounded-xl border border-line bg-surface p-4">
+            <span className="text-ink-muted">علامتك</span>
+            <span className="text-3xl font-semibold text-accent-strong tabular-nums">
+              <bdi>{formatPoints(quiz.score)}</bdi>
+            </span>
+            <span className="text-ink-muted">
+              من <bdi>{formatPoints(quiz.maxScore)}</bdi>
+            </span>
+          </p>
+        )}
 
       {quiz.state === "FINISHED" && (
         <Link
