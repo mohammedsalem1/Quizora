@@ -6,7 +6,8 @@ students take them once within an open date range, and results are visible after
 > **Status:** database, sample data, login with student/teacher roles, and quiz building for
 > teachers work end to end, through the API and an Arabic, mobile-first web app (Phase 5).
 > Students see which quizzes are open to them (Phase 6), and can start one, answer on their
-> phone and submit, with the deadline enforced by the server (Phase 7). Scoring is not
+> phone and submit, with the deadline enforced by the server (Phase 7). Expired attempts are
+> recorded, and the database itself refuses a late submission (Phase 8). Scoring is not
 > implemented yet.
 
 ## Stack

@@ -273,3 +273,53 @@ Honest account of how AI tools were used on this project. Updated as work progre
     warning was later replaced by a rule that needs no clock.
   - Adding the new module under `apps/api/src` made the human's dev API rebuild and restart.
     That was expected, and it now serves the new routes.
+
+## Phase 8 — Timer & attempt protection
+
+- **A lighter process from here on.** Before this phase the human replaced the heavy review
+  process of Phases 6 and 7 (20+ agent workflows, mutation runs, repeated full suites) with a
+  risk-based one:
+  - targeted tests while working
+  - a review by 2–4 focused agents, with every finding classified MUST FIX NOW, LATER PHASE,
+    OPTIONAL or FALSE POSITIVE, and only MUST FIX NOW fixed in the phase
+  - no mutation testing by default
+  - one full test-suite run before committing
+
+  The AI saved this as a standing rule and followed it here.
+- **Plan.** The AI checked the brief against what Phase 7 already enforced. What was left:
+  - recording expiry in the database, lazily as decided in Phase 2
+  - database CHECKs on attempts
+  - edge-case tests: expiry, times sent by the client, reconnect, and deterministic races
+    between an answer save and a submit
+- **What the AI wrote:**
+  - `expireOverdueAttempts()`, called first by every student request
+  - a hand-written migration with three CHECKs
+  - 13 new e2e tests
+  - consistent test fixtures, needed once the CHECKs rejected the old unrealistic rows
+- **How it was checked:** during the work, only the affected suites (attempts, student
+  quizzes, teacher quizzes), one after another. Then a focused review and one full run (below).
+- **Review.** Three read-only agents looked at correctness and concurrency, security and edge
+  cases, and tests. The AI checked and classified each finding:
+  - **MUST FIX NOW, fixed:**
+    - One constraint test built the start and the deadline from two separate `Date.now()`
+      calls, so it could flake if the millisecond changed between them. Three agents found
+      it.
+    - The e2e setup migrated the test database before emptying it. Leftover Phase 7 test
+      rows would have made the new CHECKs fail to apply.
+  - **FALSE POSITIVE, checked and fine:** whether the expiry step could clash with a submit
+    or deadlock, and whether the CHECKs could reject a row the API writes at the time
+    boundaries.
+- **Final checks:** the full suite was run once (25 unit and 146 e2e tests). The setup fix
+  touched every e2e suite, so under the new rules the e2e suite was run once more.
+- **Mistakes caught along the way:**
+  - For the setup fix, the AI first tried `prisma migrate reset --force` on the test
+    database. Prisma refused, because it detects AI agents and requires the user's explicit
+    consent. The AI didn't work around that guard. It switched to emptying the tables before
+    `migrate deploy`, which is the same deletion the tests already do. The AI also checked
+    how a missing database behaves on the first run, using a throwaway script it deleted
+    afterwards.
+  - Formatting a glob of files again rewrote line endings in four files the AI hadn't
+    changed. They were restored, and from now on the AI formats only the files it edits.
+  - One test compared a resubmission with the original submission time, but the helper had
+    just moved that time into the past on purpose. The behaviour was right, and the test was
+    fixed to compare with the stored value.
