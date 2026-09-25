@@ -11,7 +11,8 @@ students take them once within an open date range, and results are visible after
 > per-quiz negative marking, are calculated on the server when an attempt ends (Phase 9).
 > Teachers see each quiz's results and basic statistics, and students see their own
 > scores (Phase 10). The interface was audited and polished for Arabic, RTL, small phones
-> and screen readers (Phase 11).
+> and screen readers (Phase 11). A security review tried to break it and fixed what it found
+> (Phase 12).
 
 ## Stack
 
@@ -25,7 +26,9 @@ students take them once within an open date range, and results are visible after
 ## Running locally
 
 1. Copy each `.env.example` to `.env` (repo root, `apps/api`, `apps/web`) and adjust values if
-   needed — they default to matching values, so this works out of the box.
+   needed — they default to matching values, so this works out of the box. In production, set
+   `JWT_SECRET` to a long random value (e.g. `openssl rand -base64 48`): the API refuses to
+   start with the example one.
 2. Start Postgres: `docker compose up -d`
 3. Install dependencies: `npm install` (run once, from the repo root — npm workspaces install
    both apps; this also generates the Prisma client)

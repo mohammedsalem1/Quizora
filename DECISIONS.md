@@ -623,6 +623,75 @@ at 375px and 320px (small phones) and fixed what fell short of the brief.
 - **Moving focus after saving in the teacher editor.** The confirmations appear, but focus
   isn't moved to them.
 
+## Phase 12 — Security & edge cases
+
+This phase tried to break the application the way someone skipping the web app would. Four
+read-only reviews each took one area:
+- login, tokens, the session cookie and the web proxy
+- authorization across every route
+- input validation and malformed requests
+- the business rules (attempts, timer, score)
+
+Every claimed issue was reproduced, with a failing test or a real request, before it was
+fixed. `apps/api/test/security.e2e-spec.ts` walks through the brief's list as executable
+attacks.
+
+### Fixed (real issues)
+
+| Issue | Fix |
+|---|---|
+| Passwords could be guessed online without limit (deferred here from Phase 4) | After 5 failed logins for a username, each new try must wait 1, 2, 4 … up to 30 seconds (429, with an Arabic message). A success clears the count, and it's forgotten after 15 quiet minutes. |
+| Open redirect after login: `/login?from=/%09/evil.example` sent the user to another site (the browser strips the tab) | The return path is parsed as a URL and must stay on this site. |
+| A login form sent before its JavaScript loaded put the password in the URL | The form uses `method="post"`. |
+| Another website could log a student out mid-quiz with a cross-site form | Logging out requires a JSON request, like every other change. |
+| `/api/Auth/login` (the API ignores letter case) went through the general proxy and returned the raw token to the browser | The proxy refuses `auth/…` paths; logging in and out have their own routes. |
+| A NUL character (`\u0000`) in any text, including the login username with no account needed, gave a 500 | Every text field that is stored or looked up refuses it with a 400. |
+| Dates the validator accepted but JavaScript can't read gave a 500: week dates (`2026-W40-4`), ordinal dates, `T09Z`, comma fractions. Dates in UTC year 10000 were saved but couldn't be read back. | Only calendar date-times are accepted, and every date must be a real date before the year 10000 (400). |
+| The web proxy read request bodies of any size into memory | Bodies over 100 KB (the API's own limit) get 413. The body is read as a stream, so chunked uploads are cut off too. |
+| The example `JWT_SECRET` from `.env.example` would be accepted in production, and anyone could sign tokens with it | With `NODE_ENV=production`, the API refuses to start with it, or with any secret under 32 characters. |
+
+About the login throttle:
+- **Keyed on the username.** Every request reaches the API from the web server, and the
+  centre probably shares one IP, so keying on the IP would slow down everyone at once.
+- **Unknown usernames count too,** so the limit doesn't reveal which accounts exist.
+- **Trade-off:** someone who types a classmate's username wrongly can make them wait up to
+  30 seconds. There's no lockout beyond that.
+- **Kept in memory:** one API process, and no Redis, per the brief. A restart forgets it.
+
+### Checked and held (the brief's list)
+
+| Attack | Result |
+|---|---|
+| Requests without a token | 401 on every protected route |
+| Expired, forged or deleted-account tokens | 401 |
+| Wrong role | 403 on every route |
+| Another student's results | The attempt is found from the login, so there's nothing to reach (404). Views never include another student's score. |
+| Another teacher's quiz | 404 on every read and change route, and nothing changes |
+| Submitting after expiry | 409, backed by the database CHECK |
+| Taking the same quiz twice | 409, and the unique index |
+| Manipulating the score | The server computes it; sent values are ignored or rejected |
+| Question or option IDs from elsewhere | 404 / 400 |
+| Malformed JSON, wrong shapes or types, missing fields | 400 |
+| Calling the API directly from another website | No CORS headers are sent, so browsers refuse |
+| `__proto__` / `constructor` keys | Dropped before validation; they never reach the code or the database |
+
+### Accepted, not fixed
+
+- **Deeply nested JSON gives a 500.** A body nested about 20,000 levels deep makes the
+  framework's validation recurse too far. Nothing is read or changed; it only adds log noise.
+- **Teacher edit routes lock a quiz row before checking its owner.** Another teacher could
+  briefly delay students starting it, but only if they knew its ID, which is never shown to
+  them.
+- **Answers are tied to their question and quiz in code, not by a composite foreign key.**
+  The link is checked under the attempt's row lock, and questions are frozen once anyone
+  starts.
+- **No security headers such as `X-Frame-Options`.** Framing isn't exploitable, because
+  the `SameSite=Lax` cookie isn't sent to a cross-site frame. Better set at deployment.
+- **Logging out doesn't revoke the token.** Tokens are stateless and last 12 hours; logging
+  out removes the cookie.
+- **Any teacher can see a class's student list** by assigning a quiz to it. That follows from
+  the brief: there's no teacher–class ownership.
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested
