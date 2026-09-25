@@ -286,25 +286,21 @@ never included. The student gets the questions only when they start the quiz (Ph
 - Student pages (Phase 7). This phase adds the rule and the two read-only routes.
 - Pagination. At ~300 students and 12 teachers, a student's list stays short.
 
-### Open question for the human
+### Decided after review: changing the closing date after students have started
 
-- **What should happen when a teacher changes the closing date after students have
-  started?** An attempt's deadline is fixed when it starts (Phase 2), as
-  `min(start + time limit, closing date)`, so a date change never reaches attempts that are
-  already running. That cuts both ways:
-  - *Earlier:* the new date stops new starts, but running attempts keep their old, later
-    deadline.
-  - *Later:* a student who started just before the old closing date was capped by it. For
-    example, with 20 minutes allowed, a student who starts at 09:55 with the quiz closing at
-    10:00 gets 5 minutes. Classmates who start after the extension get the full 20, and the
-    first student can't retake it.
-
-  The options:
-  - keep the current rule
-  - recompute the deadline of running attempts when the closing date changes
-  - refuse closing-date changes once attempts exist
-
-  This needs deciding before Phase 7 builds the start endpoint.
+- **An attempt's deadline is a snapshot taken when the attempt starts:**
+  `expiresAt = min(startedAt + timeLimitMinutes, closesAt)`.
+  - If the teacher later changes `closesAt`, deadlines of attempts that have already started
+    are **not** recalculated, whether the date moves earlier or later.
+  - Students who start after the change use the new `closesAt`.
+- **Example:** the time limit is 20 minutes and the quiz closes at 10:00.
+  - A student starts at 09:55, so their attempt expires at 10:00.
+  - The teacher then moves the closing time to 10:30. That attempt still expires at 10:00.
+  - A classmate who starts at 10:05 gets until 10:25.
+- **This is the contract for Phases 7–8.** The start endpoint computes `expiresAt` once, and
+  nothing updates it afterwards.
+- The human chose this over the two alternatives: recalculating running attempts when the
+  date changes, or refusing closing-date changes once attempts exist.
 
 ## Between Phases 5 and 6 — Web frontend for the current API
 

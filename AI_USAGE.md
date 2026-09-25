@@ -168,8 +168,9 @@ Honest account of how AI tools were used on this project. Updated as work progre
   - The list is ordered by opening date, latest first.
 - **One finding was not decided by the AI.** Moving the closing date earlier doesn't end
   attempts that are already running. The sub-agents disagreed about whether that's a bug,
-  and changing it would alter a Phase 2 rule the human approved. It's written up as an open
-  question in `DECISIONS.md` for the human.
+  and changing it would alter a Phase 2 rule the human approved. The AI wrote it up as an
+  open question. The human chose to keep the rule: an attempt's deadline is fixed when it
+  starts. That is recorded in `DECISIONS.md`.
 - **What the AI wrote:** the rule as one pure function with 18 unit tests, two read-only
   student routes, and 17 e2e tests covering the brief's five cases. The e2e cases are before
   opening, during, after closing, wrong class and a previous attempt, plus drafts, roles and
@@ -183,8 +184,8 @@ Honest account of how AI tools were used on this project. Updated as work progre
     - A real test gap: no test paired an attempt with a quiz outside its window. Unit and
       e2e cases were added. Checking the closing date before the attempt now fails both
       suites.
-    - The open question for the human now covers the closing date moving *later* as well
-      as earlier.
+    - The question put to the human covered the closing date moving *later* as well as
+      earlier.
   - Mutation checks. Nine protections were broken on purpose, one at a time (ten runs,
     since the draft filter was tested twice). Each was caught by at least one test:
     - checking the attempt before the window
