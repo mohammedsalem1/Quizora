@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { isJson } from "@/lib/request-guards";
 import { readLimitedBody } from "@/lib/body";
 import { API_URL, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "@/lib/config";
 
 // Logs in through the API and keeps the returned JWT in an httpOnly cookie.
 // The browser gets the user's profile back, never the token.
 export async function POST(request: Request) {
-  if (!request.headers.get("content-type")?.startsWith("application/json")) {
+  if (!isJson(request.headers.get("content-type"))) {
     return NextResponse.json(
       { message: "Expected application/json" },
       { status: 415 },

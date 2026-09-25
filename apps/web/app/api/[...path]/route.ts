@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { readLimitedBody } from "@/lib/body";
 import { API_URL, SESSION_COOKIE } from "@/lib/config";
+import { isJson, proxyPathProblem, sendsBody } from "@/lib/request-guards";
 
 // Forwards /api/<path> to the NestJS API at /<path>, adding the JWT from the httpOnly
 // cookie. It's only a transport: the API does all authentication and authorization.
@@ -9,23 +10,16 @@ async function forward(
   ctx: RouteContext<"/api/[...path]">,
 ) {
   const { path } = await ctx.params;
-  if (path.some((segment) => segment === "." || segment === "..")) {
+  const pathProblem = proxyPathProblem(path);
+  if (pathProblem === 400) {
     return NextResponse.json({ message: "Invalid path" }, { status: 400 });
   }
-  // Logging in and out have their own routes (they keep the token in the cookie). The API's
-  // paths ignore letter case, so /api/Auth/login would otherwise reach the API's login here
-  // and hand the raw token to the browser.
-  if (path[0]?.toLowerCase() === "auth") {
+  if (pathProblem === 404) {
     return NextResponse.json({ message: "Not found" }, { status: 404 });
   }
 
-  const sendsBody = request.method !== "GET" && request.method !== "DELETE";
-  // Browsers can't send a cross-site application/json request without CORS approval
-  // (which the app never grants), so this plus SameSite=Lax blocks CSRF.
-  if (
-    sendsBody &&
-    !request.headers.get("content-type")?.startsWith("application/json")
-  ) {
+  const withBody = sendsBody(request.method);
+  if (withBody && !isJson(request.headers.get("content-type"))) {
     return NextResponse.json(
       { message: "Expected application/json" },
       { status: 415 },
@@ -38,7 +32,7 @@ async function forward(
     API_URL,
   );
 
-  const body = sendsBody ? await readLimitedBody(request) : undefined;
+  const body = withBody ? await readLimitedBody(request) : undefined;
   if (body === null) {
     return NextResponse.json({ message: "Request too large" }, { status: 413 });
   }
@@ -49,7 +43,7 @@ async function forward(
       method: request.method,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(sendsBody ? { "Content-Type": "application/json" } : {}),
+        ...(withBody ? { "Content-Type": "application/json" } : {}),
       },
       body,
       cache: "no-store",
