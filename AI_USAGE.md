@@ -154,3 +154,60 @@ Honest account of how AI tools were used on this project. Updated as work progre
   - An early form design would have caused hydration mismatches, because default dates
     depend on the browser's clock and timezone. It was changed so the form renders only in
     the browser.
+
+## Phase 6 — Quiz availability
+
+- **Plan critique before code.** The AI wrote a plan, then had a workflow of 8 read-only
+  sub-agents attack it. Four findings were adopted:
+  - A student's own attempt is checked before class membership, so a started quiz doesn't
+    disappear when the teacher changes its classes.
+  - The list and detail queries also include quizzes the student has an attempt on.
+  - Phase 5's claim that the first attempt can't overlap an edit "without extra code" was
+    wrong. Starting a quiz must lock the quiz row before reading it; this is recorded for
+    Phase 7.
+  - The list is ordered by opening date, latest first.
+- **One finding was not decided by the AI.** Moving the closing date earlier doesn't end
+  attempts that are already running. The sub-agents disagreed about whether that's a bug,
+  and changing it would alter a Phase 2 rule the human approved. The AI wrote it up as an
+  open question. The human chose to keep the rule: an attempt's deadline is fixed when it
+  starts. That is recorded in `DECISIONS.md`.
+- **What the AI wrote:** the rule as one pure function with 18 unit tests, two read-only
+  student routes, and 17 e2e tests covering the brief's five cases. The e2e cases are before
+  opening, during, after closing, wrong class and a previous attempt, plus drafts, roles and
+  a check that no question text or correct answer reaches students.
+- **How it was checked:**
+  - Tests: 19 unit tests and 109 e2e tests pass in total. Type-check and lint are clean.
+  - Code review: 4 read-only sub-agents looked for rule, security, test and query problems.
+    Each finding was then checked by a separate sub-agent trying to refute it (7 sub-agents
+    in all). Three findings were raised and all three were refuted as defects. Two still led
+    to changes:
+    - A real test gap: no test paired an attempt with a quiz outside its window. Unit and
+      e2e cases were added. Checking the closing date before the attempt now fails both
+      suites.
+    - The question put to the human covered the closing date moving *later* as well as
+      earlier.
+  - Mutation checks. Nine protections were broken on purpose, one at a time (ten runs,
+    since the draft filter was tested twice). Each was caught by at least one test:
+    - checking the attempt before the window
+    - the attempt lookup being limited to the student
+    - including quizzes the student has an attempt on
+    - checking the attempt before the class
+    - the closing time being exclusive
+    - the attempt's `expiresAt`
+    - the draft filter
+    - the student role on the routes
+    - building the response field by field
+  - Two of those results need context:
+    - The closing-time boundary is caught only by the unit tests.
+    - Drafts are blocked twice, by the query and by the rule. Removing only the rule's check
+      is caught by the unit tests; removing both fails the e2e tests too.
+  - Each file was restored byte-for-byte after each mutation.
+- **Mistakes caught along the way:**
+  - One mutation run was started in the background. The AI stopped it when it seemed stuck,
+    but the script had already moved on, so a mutated `availability.ts` briefly sat in the
+    working tree. The AI noticed, restored the file from its clean copy, checked it, and
+    re-ran the check in the foreground with an automatic restore. The mutated file was
+    never committed.
+  - The human's `npm run dev:api` was running in watch mode, so it rebuilt and restarted
+    each time a mutation touched `src/`. It ended on the restored code. Mutation checks
+    should be run while the dev API is stopped.
