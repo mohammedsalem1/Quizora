@@ -10,7 +10,8 @@ students take them once within an open date range, and results are visible after
 > recorded, and the database itself refuses a late submission (Phase 8). Scores, including
 > per-quiz negative marking, are calculated on the server when an attempt ends (Phase 9).
 > Teachers see each quiz's results and basic statistics, and students see their own
-> scores (Phase 10).
+> scores (Phase 10). The interface was audited and polished for Arabic, RTL, small phones
+> and screen readers (Phase 11).
 
 ## Stack
 
