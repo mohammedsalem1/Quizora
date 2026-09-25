@@ -11,7 +11,9 @@ services:
     volumes:
       - quizora-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quizora}"]
+      # Over TCP (-h), not the socket: on its very first start Postgres briefly runs a
+      # socket-only server while it initialises, which must not count as ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-quizora}"]
       interval: 5s
       timeout: 5s
       retries: 10
