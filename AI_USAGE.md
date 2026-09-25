@@ -1,33 +1,204 @@
 # AI Usage
 
-Honest account of how AI tools were used on this project. Updated as work progresses.
+An honest account of how AI was used to build Quizora. The **summary** answers the brief's
+questions. The **[phase-by-phase log](#phase-by-phase-log)** after it records, for each
+phase:
+- what the AI did
+- how it was checked
+- what the AI got wrong
 
-## Tools
+## Summary
 
-- **Claude Code**, used interactively from the terminal in this repository. The underlying
-  model was switched during the work (Sonnet 5 for most of Phase 1, Opus 5.5 to finish it);
-  the model used for each commit is recorded in its `Co-Authored-By` trailer.
+**In short:**
+- An AI coding agent wrote nearly all of Quizora's code, tests and documentation, and proposed
+  most of the design details, stating them as assumptions in its plans.
+- A human wrote the brief and made the key product and process decisions
+  ([listed below](#important-manual-decisions)).
+- The human approved each phase before the next began and merged every pull request.
 
-## How it was directed
+### AI tools used
 
-- Work is driven turn-by-turn by a human giving explicit instructions and reviewing output
-  before it's committed — not by an unsupervised agent loop.
-- A standing project brief lives in [`CLAUDE.md`](./CLAUDE.md), describing architecture,
-  coding principles, testing/security expectations, and Git workflow, so the AI's output
-  stays consistent with those constraints across sessions.
-- Work is broken into phases (this file's Phase 1 entry corresponds to
-  [`DECISIONS.md`](./DECISIONS.md)'s Phase 1 section). Each phase is scoped explicitly before
-  the AI writes any code, and the AI is told what *not* to build yet.
+- **Claude Code**, Anthropic's coding agent, run in a terminal in this repository. The human
+  confirms it was the only AI tool used for Quizora.
+- **Models:**
+  - Claude Sonnet 5 for most of Phase 1, and Claude Opus 5.5 for everything after.
+  - Every commit other than the pull-request merges was made through Claude Code. Each one
+    names its model in a `Co-Authored-By` trailer.
+- **Features of Claude Code that were used:**
+  - **Sub-agents:** separate read-only AI agents that critiqued plans, reviewed code and
+    audited tests.
+    - From the web frontend pass to Phase 7, they ran as multi-agent workflows of 7 to 23
+      agents. That includes a 9-agent investigation of a login failure the human hit (see
+      "Between Phases 5 and 6").
+    - From Phase 8 on, 2 to 4 agents per phase.
+    - They only reported findings. The main session checked each one before acting on it.
+  - **Skills,** which are instruction packs kept in `.claude/skills` and `.agents/skills`.
+    - `frontend-design` and `ui-ux-pro-max` were used for the web interface. The human
+      installed `ui-ux-pro-max` during that work.
+    - At the start of Phase 3, the AI read the Prisma skills' reference notes on agent
+      safety, seeding and PostgreSQL setup.
+    - The Tailwind skill and two general ones were available but not used.
+  - **Memory,** saved at the human's request before Phase 8. It kept the phase rules and the
+    lighter review process in force after the conversation was compacted, and in
+    sub-agents.
+  - **Maximum-effort mode ("ultracode"),** which the human had switched on for most of the
+    work from the web frontend pass on. It pushes the AI towards multi-agent workflows.
+    Most of the review workflows ran under it, including Phase 7's two workflows of 23
+    agents.
+- **Browser checks** were scripts the AI wrote to drive headless Edge against its own
+  servers, from Phase 7 on at ports 3100/3101. The exception was a few read-only screenshots
+  through the human's own dev server in Phase 10. The human declined to let the AI control
+  their own Chrome browser through an extension.
 
-## How output was checked
+### How prompts and instructions were given
 
-- Every file the AI created or changed was reviewed before committing.
-- Scaffolding commands (`create-next-app`, `@nestjs/cli new`) were run through the AI but are
-  themselves standard, well-known generators — their output is the same as a human would get
-  running them directly.
-- This section will be expanded with specifics (what was generated vs. hand-written, what
-  the AI got wrong and had to be corrected, which tests were AI-authored vs. human-authored)
-  as later phases add real application logic.
+- **A written brief of 16 phases** from the human:
+  - each phase's goals
+  - standing rules:
+    - one phase at a time, stopping for approval after each
+    - small commits
+    - never rewrite git history or change the remote
+    - the fixed stack, with no Supabase, Redis, queues or microservices
+    - no real personal data
+    - stop and ask before changing an earlier architectural decision
+- **[`CLAUDE.md`](./CLAUDE.md)**, which the AI wrote from the brief in Phase 1. It's loaded
+  into every session and covers:
+  - the architecture
+  - "never trust the client"
+  - testing and security expectations
+  - the git workflow
+  - that this file must be honest
+- **Short instructions per phase,** such as "Start Phase 9", "push it and give me the PR
+  link", "git checkout master" and "git pull origin master". For each phase the AI:
+  1. inspected the repository
+  2. wrote a plan with its assumptions and risks
+  3. asked the human multiple-choice questions for decisions that were the human's
+     ([listed below](#important-manual-decisions))
+  4. implemented and tested the phase
+  5. committed on a feature branch and reported
+  6. stopped until the human approved the next phase
+- **Process rules added along the way.** From Phase 8 on, the human replaced the heavy
+  reviews with a lighter, risk-based process:
+  - targeted tests
+  - 2 to 4 review agents, with every finding classified
+  - one full test run before committing
+- **Long sessions.** Most of the work ran in one long Claude Code conversation.
+  - It was resumed after interruptions.
+  - It was compacted twice to fit the AI's context: once by the human with `/compact`, and
+    once automatically.
+  - `CLAUDE.md` and memory kept the rules in force throughout.
+
+### How the generated code was reviewed
+
+**By the AI, before handing over:**
+- **Plans critiqued by read-only agents** before the main code was written (Phases 6, 7).
+- **A read-only review in every phase from Phase 6 on,** except Phase 13, where the human
+  stopped the final review.
+  - In Phases 6 and 7, a separate agent tried to refute each finding.
+  - From Phase 8 on, every finding was classified MUST FIX NOW, LATER PHASE, OPTIONAL or
+    FALSE POSITIVE. MUST FIX NOW findings were fixed in the phase. When the AI also fixed a
+    cheap correctness item, the phase says so.
+- **Security claims reproduced first.** Each was turned into a failing test or a real
+  request before it was fixed, and claims that couldn't be reproduced weren't "fixed"
+  (Phase 12).
+- **The AI's own mistakes are recorded** in each phase below.
+
+**By the human.** The human confirms they:
+- read the AI's end-of-phase report (plan, changes, test results) before approving the next
+  phase
+- read each pull request's diff on GitHub before merging it
+- ran commands and tests themselves
+- tried the app themselves
+
+Other commands were typed as instructions for the AI to run, such as `npm run db:migrate`
+after Phases 8 and 9.
+
+The human's own use of the app caught a real problem. Between Phases 5 and 6, they couldn't
+log in. The AI traced the cause to its own test servers occupying the app's ports (see that
+section).
+
+**How changes reached `master`.**
+- Phase 1's first three commits went straight to `master`.
+- Since then, at the human's request, every change has gone through a pull request on its
+  own branch. Up to Phase 14 that was 15 merged pull requests, numbered #1 to #16 (#12
+  wasn't merged).
+- The human merged every one. The AI never merged a pull request and never rewrote history.
+
+### How tests were used to verify the AI's code
+
+- **API tests were written with the code,** in each phase from Phase 4 on. Phase 13 then
+  added 17 API tests for gaps, and the web app's first 15 unit tests, for its security
+  helpers. At the end of Phase 14 there were 271:
+  - 55 API unit tests
+  - 201 API end-to-end tests against a real database
+  - 15 web unit tests
+
+  The README maps each rule to its tests.
+- **Checking that tests can fail.** A test that can't fail proves nothing, so protections
+  were broken on purpose to see the tests catch it:
+  - 2 protections in Phase 4 and 4 in Phase 5, removed by hand
+  - mutation checks: 9 in Phase 6, 14 in Phase 7 and 10 in Phase 9
+  - the new open-redirect test in Phase 13, which fails against the old, vulnerable code
+
+  When a check went uncaught, the test was fixed. Phase 7's double-start test, for example,
+  never actually overlapped its two requests.
+- **Races tested deterministically.** Instead of hoping two requests collide, the tests hold
+  a real database lock and wait until the request under test is queued behind it
+  (Phases 7, 8, 13).
+- **Independent recomputation:**
+  - Phase 13's audits worked out the tests' expected values by hand.
+  - Phase 14 recomputed every seeded score in SQL and compared them with the app's.
+- **Where automated tests don't reach** (the pages), the checks were:
+  - headless-browser scripts at 375px and 320px, with every screenshot reviewed
+  - `curl` checks of the web app's routes
+
+  See Phases 7, 11 and 12.
+- **Keeping tests away from the development data:**
+  - The end-to-end tests refuse any database whose name doesn't end in `_test`.
+  - The browser checks of Phases 7 and 11 used separate servers and the test database.
+  - The Phase 14 seed checks used a scratch database.
+  - Some earlier hand tests did read and write the development data:
+    - trying endpoints with `curl` in Phases 4 and 5
+    - a test quiz in the web frontend pass, which was later deleted
+
+### Important manual decisions
+
+These were made by the human, usually by choosing between options the AI laid out with their
+trade-offs:
+
+- **The whole plan:** the stack, the 16 phases and the rules above, in the brief.
+- **After Phase 1:** every change goes through a pull request.
+- **Phase 2, the scoring and timing rules:**
+  - negative marking as a percentage of each question's points
+  - totals never below 0
+  - the closing date as a hard deadline
+  - a draft and publish step
+- **Before Phase 6:**
+  - building the web frontend early
+  - its scope
+  - an Arabic, right-to-left interface
+  - keeping the login token in an httpOnly cookie
+- **Phase 6:**
+  - An attempt's deadline is fixed when it starts, even if the teacher later moves the
+    closing date. This was chosen over recalculating deadlines, or refusing date changes.
+  - The login-failure fix stays on its own branch, separate from the phases. It hasn't been
+    asked for since.
+- **Phase 7:** how to split the student flow, timer protection and scoring across Phases 7
+  to 9.
+- **Phase 8:** the switch to a lighter, risk-based review process.
+- **Phase 9:** a heavier review for scoring, as a high-risk area.
+- **Phases 10–11:** running Phase 11 straight after Phase 10.
+- **Phase 12:** doing Phase 12 before Phase 13, after the AI pointed out the brief says not
+  to skip phases.
+- **Phase 13:** stopping the final review agent.
+- **Phase 15:**
+  - one-command setup scripts
+  - a summary on top of these two files, instead of rewriting them by topic
+- **Throughout:** approving every phase and merging every pull request.
+
+---
+
+# Phase-by-phase log
 
 ## Phase 1 — Project foundation
 
@@ -154,6 +325,21 @@ Honest account of how AI tools were used on this project. Updated as work progre
   - An early form design would have caused hydration mismatches, because default dates
     depend on the browser's clock and timezone. It was changed so the form renders only in
     the browser.
+- **A login failure the human hit, caused by the AI.** Trying the app, the human couldn't
+  log in as `teacher.rana` and got the generic "try again later" message.
+  - The AI checked what was running on each port, and ran a 9-agent read-only
+    investigation.
+  - The cause was the AI's own check servers on ports 3000 and 3001. When the human started
+    `npm run dev:api`, the port was taken, so their API never started. Once the AI stopped
+    its servers, the web app was calling an API that wasn't there. The web login route turns
+    that into the generic message.
+  - A related trap: when port 3000 is busy, `next dev` moves to the next free port, which can
+    be the API's.
+  - From Phase 7 on, the AI ran its checks on ports 3100/3101.
+  - It proposed a small fix, on its own branch: fixed ports for the web app, logging when
+    the API is unreachable, and an Arabic "server unavailable" message. The human asked to
+    keep that fix separate from the phases, and it hasn't been done yet. Phase 15's
+    `npm run dev` fixes the web app's port, but only for that command.
 
 ## Phase 6 — Quiz availability
 
@@ -595,3 +781,71 @@ Honest account of how AI tools were used on this project. Updated as work progre
 - **Checks after the fixes:** the seed and the SQL checks ran again with the same result.
   One full `npm test` run: 55 API unit, 201 API e2e and 15 web tests, 271 in all, all
   passing. The suite doesn't use the seed, so the later seed and doc fixes can't affect it.
+
+## Phase 15 — Documentation
+
+- **Process.** The AI read all three documents, the setup files and the code, then wrote a
+  plan. It asked the human four questions:
+  - one-command setup or clearer steps (they chose one-command scripts)
+  - how to organise `DECISIONS.md` and this file (a summary on top, keeping the phase log)
+  - whether any AI tool other than Claude Code was used (none)
+  - how the human reviewed the AI's work, recorded in the summary above
+- **What the AI wrote:**
+  - `scripts/setup.mjs` and `scripts/dev.mjs`, and the root `setup`, `dev` and `db:deploy`
+    commands
+  - a new README
+  - the summaries at the top of `DECISIONS.md` and this file
+  - short READMEs for both apps, replacing the generators' boilerplate
+  - a stricter Postgres health check in `docker-compose.yml`
+  - the web frontend section moved to its place in time, and notes on a few overtaken log
+    lines
+- **How it was checked:** a fresh clone of the branch, in a scratch folder, was taken
+  through the README. Details are in `DECISIONS.md`, Phase 15.
+  - `npm install`
+  - `npm run setup` twice, including the steps for a taken Postgres port
+  - `npm run dev`, with logins and pages checked through the web app
+  - the README's `curl` example
+  - `npm test`: 55 API unit, 201 API e2e and 15 web tests, all passing
+- **Review.** Four read-only agents checked:
+  - the README against the code
+  - the DECISIONS summary against the log
+  - this file's honesty, against the log, git history and the session transcript
+  - the two scripts
+
+  The AI verified the main claims against the code and the session transcript before
+  fixing. Fixed from their findings:
+  - **Scripts:** if port 3000 was taken, Next.js took the API's port 3001. `npm run dev` now
+    fixes the web port.
+    - The Postgres health check could pass on a first start before TCP was up.
+    - Setup now warns on screen before deleting the development data.
+  - **README:**
+    - It claimed every change must be JSON; DELETE isn't checked.
+    - The status-code table and the prerequisites (Node and Compose versions) were
+      imprecise.
+  - **DECISIONS:**
+    - Database constraints were listed as beyond the brief, but the brief asks for them.
+    - A negative-marking rule was credited to the human, when it was the AI's proposal.
+    - The claim that `npm run dev` involves "no shell" was wrong.
+    - Several limitations and phase references were missing.
+  - **This file:**
+    - The login failure above, which this file didn't mention before.
+    - The example of a command the human ran was one the AI ran.
+    - The review claims covered phases they didn't.
+    - The claim that tests were always written with the code, and the claim that the
+      development data was "never at risk".
+    - The Prisma skills the AI did read.
+    - The workflow sizes.
+    - How much of the work ran in maximum-effort mode.
+- **Mistakes caught along the way:**
+  - A refactor of the setup script's `.env` loop left a variable behind, which would have
+    crashed it. It was caught on reading the change back, before it ran.
+  - An `npm exec` call meant to print a variable started downloading an unneeded npm
+    package called `node`. It was stopped at once, and nothing was installed.
+  - The first fresh-clone start hit the font download timeout described in `DECISIONS.md`.
+- **Checks after the fixes:**
+  - setup on an emptied Postgres volume
+  - `npm run dev` with port 3000 taken
+  - a normal `npm run dev`
+
+  The test suite wasn't re-run. The fixes changed only the two scripts, the Postgres health
+  check and documentation, and the tests run none of these.
