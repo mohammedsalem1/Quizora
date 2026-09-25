@@ -692,6 +692,71 @@ About the login throttle:
 - **Any teacher can see a class's student list** by assigning a quiz to it. That follows from
   the brief: there's no teacher–class ownership.
 
+## Phase 13 — Automated tests
+
+### How the gaps were found
+
+- **Coverage.** The API's e2e tests already reached about 98% of its lines. Line coverage
+  can't tell whether a test would fail when a rule breaks, though.
+- **Audit.** Two read-only audits mapped every rule in the brief's priority list to the tests
+  that would fail if it broke, and listed the rules nothing protected.
+
+### Decisions
+
+- **One command runs everything:** `npm test` from the repository root runs the API unit
+  tests, the API e2e tests and the web tests.
+- **The web app got unit tests without new dependencies.** They use Node's built-in test
+  runner, which strips TypeScript types itself.
+  - They cover the pure helpers the Phase 12 security fixes depend on:
+    - the return-path guard (open redirect)
+    - the request guards (JSON only for changes, refusing `.`/`..` and `auth/…` in the
+      proxy)
+    - the body-size limit
+    - Arabic plurals
+  - To make them testable, those rules moved from the route handlers into `lib/`; the routes
+    behave exactly as before.
+  - This corrects an earlier statement (web frontend section) that every rule is "enforced
+    (and tested) in the API". The Phase 12 fixes live in the web app, and these tests now
+    cover them.
+- **Race tests don't depend on timing.** Each one holds a real database lock and waits until
+  the request under test is provably queued behind it, so the order is certain. These cover:
+  - two starts at once, down to the duplicate insert
+  - a teacher's edit racing a start
+  - an answer, clear or submit whose deadline passes while it waits
+  - the expiry step racing a submit
+
+### Gaps closed
+
+- **Timer:**
+  - Resuming never recalculates the deadline after the closing date moves.
+  - The deadline check made after the row lock decides, even when the expiry step before it
+    didn't act.
+  - The expiry step never overwrites a submission that got the lock first.
+- **Scoring:** the answer that wins a race against submit is actually scored.
+- **Locking after the first attempt:**
+  - It also holds once every attempt has finished.
+  - It holds against a start that is still in progress.
+- **Authentication:**
+  - A token is HS256, lasts 12 hours and carries only the user id. An HS512 token is refused.
+  - The production secret check has its own unit tests.
+  - Unknown usernames are throttled like real ones.
+  - A successful login really clears the count.
+- **Authorization:** another teacher gets 404, never a 409 that would reveal a quiz exists or
+  what state it's in.
+- **Smaller ones:**
+  - the 100-question cap
+  - publishing lists every problem, including safeguards the API can't normally trigger
+  - exact finish times in teacher results
+  - the unique attempt index
+  - one test that could never fail was replaced
+
+### Not covered by automated tests
+
+- **The pages themselves and the web login route's cookie handling.** They need the Next.js
+  runtime. They were checked in a headless browser and with `curl` (Phases 7, 11 and 12).
+- **The API module calling the secret check at startup.** The check itself is unit-tested;
+  the one line in `auth.module.ts` that calls it is not.
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested

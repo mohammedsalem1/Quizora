@@ -514,3 +514,43 @@ Honest account of how AI tools were used on this project. Updated as work progre
       test now checks it's dropped and nothing is polluted.
   - A scripted edit of the date pattern silently failed to match because of regex escaping.
     The AI noticed and made the change with an exact edit instead.
+
+## Phase 13 — Automated tests
+
+- **Process.**
+  - The AI measured the API's coverage from the e2e tests (about 98% of lines).
+  - Two read-only agents audited the brief's priority areas: one for authentication,
+    authorization and permissions; one for availability, attempts, timer and scoring. Each
+    mapped rule to test, checked the expected values by hand (all were right), and listed
+    the rules no test would catch breaking.
+  - A final review of the new tests was started, but the human stopped it, so this phase
+    has no end-of-phase review.
+  - There was no mutation testing, per the human's standing rule. Instead, the new
+    open-redirect test was checked once against the old, vulnerable code: it fails there and
+    passes on the fix.
+- **What the AI added:**
+  - **API tests:** 17 new tests (5 unit, 12 e2e), plus stronger assertions in several
+    existing ones.
+    - Race tests made deterministic with held database locks.
+    - Resuming keeps the deadline.
+    - The deadline check after the lock, and the expiry re-check.
+    - Scoring of an answer that wins a race.
+    - The lock after finished attempts, and during a start.
+    - Token claims and algorithm.
+    - 404 instead of 409 for other teachers.
+    - Unknown usernames throttled like real ones.
+    - The 100-question cap, publishing safeguards, the unique index.
+  - **Web tests:** 15 tests with Node's built-in runner, no new dependencies. Two helpers
+    were moved out of route handlers so they could be tested, without changing behaviour.
+  - **Commands and docs:** `npm test` at the root, and a README section on running the tests
+    and which rule each suite covers.
+- **A mistake from Phase 12, found and fixed here.** `test/security.e2e-spec.ts` contained six
+  raw NUL bytes where `\u0000` escapes were meant. The tests had still worked, but `grep`
+  treated the file as binary.
+  - **Cause:** the scripts the AI used to edit files lost one level of backslashes, so the
+    `\u0000` it wrote became a real NUL character.
+  - **Fix:** the AI's first two repair attempts failed the same way. The third built the
+    backslash from its character code. The file now has none, and a scan of the repository
+    found no other file with raw NUL bytes.
+- **Checks:** one full run of `npm test`: 55 API unit, 201 API e2e and 15 web tests, 271 in
+  all, all passing. Lint, type-check and `next build` were clean.
