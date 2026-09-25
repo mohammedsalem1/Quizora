@@ -217,12 +217,94 @@ All routes require the TEACHER role and act only on the caller's own quizzes.
 - **Edits and the first attempt can't overlap.** Every change locks the quiz's row
   (`SELECT … FOR UPDATE`) for the length of its transaction. Postgres makes an attempt
   insert, which references the quiz, wait for that lock and vice versa, so "no attempts
-  yet" can't turn false halfway through an edit. Phase 8 gets this without extra code.
+  yet" can't turn false halfway through an edit. *Corrected in Phase 6:* this alone isn't
+  enough. Starting an attempt also has to lock the quiz row before it reads the quiz (see
+  Phase 6).
 
 ### Deliberately left out
 
 - Deleting a quiz, unpublishing, and reordering questions. The brief doesn't ask for them.
   Each would be a small addition.
+
+## Phase 6 — Quiz availability
+
+### API
+
+Both routes require the STUDENT role.
+
+| Route | Purpose |
+|---|---|
+| `GET /student/quizzes` | The quizzes this student can see, latest opening date first, each with its state |
+| `GET /student/quizzes/:id` | One of them, with the same fields |
+
+Each quiz includes its title, description, dates, time limit, negative-marking percentage,
+number of questions, total points and `state`. Questions, options and correct answers are
+never included. The student gets the questions only when they start the quiz (Phase 7).
+
+### Decisions
+
+- **The rule is one function**, `quizAvailability()` in `apps/api/src/quizzes/availability.ts`,
+  and it has its own unit tests. The endpoint that starts a quiz (Phase 7) must call the same
+  function, so what the list shows and what the server allows can't drift apart.
+- **States:**
+
+  | State | Meaning |
+  |---|---|
+  | `NOT_OPEN_YET` | Assigned and published, but before its opening time |
+  | `AVAILABLE` | The student can start it now |
+  | `IN_PROGRESS` | The student's attempt is still running, so they can resume it |
+  | `FINISHED` | The student's attempt was submitted or its time ran out. There's no second attempt |
+  | `CLOSED` | It closed and the student never started it |
+
+- **A quiz is open while `opensAt ≤ now < closesAt`.** At exactly the closing time it's
+  closed. An attempt's time is up at exactly its `expiresAt`.
+- **A previous attempt is checked first.** Once a student has started a quiz, it stays
+  visible to them (`IN_PROGRESS` or `FINISHED`), even if the teacher later removes their
+  class from it. That way they can still resume it, and later see their result. A student
+  who hasn't started it sees it only while their class is assigned.
+- **An attempt still marked `IN_PROGRESS` after its `expiresAt` shows as `FINISHED`.** Marking
+  it `EXPIRED` and scoring it happen on the next request that touches it (Phases 8–9, with no
+  background job, as decided in Phase 2). The state shown doesn't wait for that.
+- **Quizzes a student can't see return 404, not 403.** A draft, another class's quiz and a
+  nonexistent ID all look the same, as with teachers' quizzes in Phase 5. A malformed ID
+  returns 400.
+- **Everything is decided on the server with the server's clock.** The client sends neither
+  the time nor its class, and the rule doesn't depend on what the frontend shows.
+- **Starting a quiz (Phase 7) must lock the quiz row before reading it.** This corrects the
+  Phase 5 note.
+  - The insert's foreign-key lock arrives only at the insert. Before inserting, the start
+    endpoint reads the quiz: its availability, and the time limit and closing date it
+    computes `expiresAt` from.
+  - A teacher's edit could commit between that read and the insert. The attempt would then
+    start from the old time limit, while the quiz shows the new one and is locked.
+  - So the start must run `SELECT … FOR SHARE` on the quiz row at the beginning of its
+    transaction, before those reads. It waits for any edit's `FOR UPDATE` (and edits wait
+    for it), while starts by different students don't block each other.
+
+### Deliberately left out
+
+- Student pages (Phase 7). This phase adds the rule and the two read-only routes.
+- Pagination. At ~300 students and 12 teachers, a student's list stays short.
+
+### Open question for the human
+
+- **What should happen when a teacher changes the closing date after students have
+  started?** An attempt's deadline is fixed when it starts (Phase 2), as
+  `min(start + time limit, closing date)`, so a date change never reaches attempts that are
+  already running. That cuts both ways:
+  - *Earlier:* the new date stops new starts, but running attempts keep their old, later
+    deadline.
+  - *Later:* a student who started just before the old closing date was capped by it. For
+    example, with 20 minutes allowed, a student who starts at 09:55 with the quiz closing at
+    10:00 gets 5 minutes. Classmates who start after the extension get the full 20, and the
+    first student can't retake it.
+
+  The options:
+  - keep the current rule
+  - recompute the deadline of running attempts when the closing date changes
+  - refuse closing-date changes once attempts exist
+
+  This needs deciding before Phase 7 builds the start endpoint.
 
 ## Between Phases 5 and 6 — Web frontend for the current API
 

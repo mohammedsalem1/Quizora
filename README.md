@@ -5,7 +5,8 @@ students take them once within an open date range, and results are visible after
 
 > **Status:** database, sample data, login with student/teacher roles, and quiz building for
 > teachers work end to end, through the API and an Arabic, mobile-first web app (Phase 5).
-> Quiz taking and scoring for students are not implemented yet.
+> The API also tells each student which quizzes are open to them (Phase 6). Quiz taking and
+> scoring for students are not implemented yet.
 
 ## Stack
 
@@ -49,6 +50,10 @@ Log in at http://localhost:3000 with a sample account (password `Quizora@2026` f
 As a teacher: create a quiz (dates, time limit, negative marking, classes), add questions
 and tap the letter of the correct answer, then publish. Other teachers can't open your
 quizzes, and once a student starts a quiz its questions and scoring rules are locked.
+
+Students can't take quizzes in the web app yet. The API already lists each student's quizzes
+with their state (`GET /student/quizzes`: not open yet, available, in progress, finished or
+closed), and the student pages arrive in Phase 7.
 
 The browser only talks to the web app. The web app keeps the login token in an httpOnly
 cookie and forwards `/api/*` requests to the NestJS API, which does every check.
