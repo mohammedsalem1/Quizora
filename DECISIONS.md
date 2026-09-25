@@ -757,6 +757,79 @@ About the login throttle:
 - **The API module calling the secret check at startup.** The check itself is unit-tested;
   the one line in `auth.module.ts` that calls it is not.
 
+## Phase 14 — Seed & demo
+
+`npm run db:seed` now builds a demo of the whole centre. The README ("Trying it out") lists
+the accounts and quizzes.
+
+### Decisions
+
+- **The brief's real size:** 3 classes, 12 teachers and 300 students (100 per class). This
+  replaces the smaller Phase 3 seed (3 teachers, 18 students).
+  - The teacher results page gets tested with 200 students on one quiz.
+  - Seven teachers have no quizzes, which shows what a new teacher sees.
+- **Usernames went from two digits to three** (`s10a01` became `s10a001`), because a class now
+  has 100 students.
+- **The names are all made up.** Each is a random pair from a list of common first names and a
+  list of common family names, and no pair is used twice. Four students in 11A have names
+  in Latin letters, so the lists mix Arabic and Latin script, as they would in real use.
+- **There's a quiz in every state a student or teacher can see:**
+  - open
+  - not open yet
+  - draft
+  - closed, with results
+- **A 2-minute quiz, open to every class.** The brief's final QA (Phase 16) includes testing
+  the timer, and the other quizzes have 15–25 minute limits. It also uses a different negative
+  marking rate (50%) from the maths quizzes (25%).
+- **The open quizzes start with no attempts.** A reviewer takes them fresh, sees their own
+  result appear on the teacher's results page, and can watch the quiz lock after the first
+  start. The closed quizzes carry the realistic history instead.
+- **Past attempts are scored by the app's own code.** The seed creates each attempt with its
+  answers, then ends it with `finalizeAttempt`, the same function the API uses on submit or
+  expiry.
+  - No score is written by hand.
+  - The database's CHECK constraints (deadline, submission time, score range) apply to every
+    seeded row, as they do to real ones.
+- **The history is the same on every run.** It comes from a small seeded random generator,
+  not `Math.random`.
+- **Dates are relative to the day the seed runs**, with quizzes opening and closing in the
+  afternoon or evening. Each quiz stays in its described state for a few days: the upcoming
+  one opens after 3 days, and the open ones close after 14 or more. Re-running the seed
+  resets them.
+- **The first three students of each class have fixed outcomes** on their class's closed
+  quiz, so the README can point at them:
+  - `…001` submitted
+  - `…002` ran out of time
+  - `…003` never started
+
+### How it was checked
+
+The seed was run twice in a row against a separate scratch database, not the development
+one: it deletes all data. Then:
+
+- **SQL checks:**
+  - Every stored score and per-answer point matched an independent recomputation (correct
+    +points, wrong −percent, total floored at 0).
+  - Every attempt falls inside its quiz's window.
+  - All 300 names are different.
+  - The open quizzes have no attempts.
+- **A temporary API against the same database** showed:
+  - each student state
+  - the teacher statistics on the fractions quiz: 200 students listed, and an average of
+    7.51 out of 14 over the 185 finished attempts
+  - a 120-second deadline on the 2-minute quiz
+  - 409 when starting a quiz that is upcoming or closed
+  - 404 for another teacher's results
+
+### Deliberately left out
+
+- **In-progress attempts in the seed.** Their deadlines would pass minutes after seeding, so
+  what a reviewer saw would depend on when they looked. Taking a quiz shows that state
+  anyway.
+- **No automated test for the seed.** The seed is a development tool. The rules it relies on
+  (scoring, deadlines, the CHECK constraints) are already tested, and it was checked as
+  described above.
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested

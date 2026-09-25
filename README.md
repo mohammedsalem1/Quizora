@@ -12,7 +12,8 @@ students take them once within an open date range, and results are visible after
 > Teachers see each quiz's results and basic statistics, and students see their own
 > scores (Phase 10). The interface was audited and polished for Arabic, RTL, small phones
 > and screen readers (Phase 11). A security review tried to break it and fixed what it found
-> (Phase 12).
+> (Phase 12). Automated tests cover the rules that matter most (Phase 13), and the sample
+> data is a full demo of the centre, with past results (Phase 14).
 
 ## Stack
 
@@ -34,7 +35,7 @@ students take them once within an open date range, and results are visible after
    both apps; this also generates the Prisma client)
 4. Create the database tables: `npm run db:migrate`
 5. Load sample data: `npm run db:seed` — **this deletes all existing data first.** Every
-   sample account uses the password `Quizora@2026` (e.g. `teacher.rana`, `s10a01`).
+   sample account uses the password `Quizora@2026` (e.g. `teacher.rana`, `s10a001`).
 6. Run the apps (two terminals):
    - Backend: `npm run dev:api` (http://localhost:3001)
    - Frontend: `npm run dev:web`, then open **http://localhost:3000**
@@ -46,15 +47,44 @@ _TBD in a later phase: a single one-command startup._
 
 ## Trying it out
 
-Log in at http://localhost:3000 with a sample account (password `Quizora@2026` for all):
+`npm run db:seed` fills the database with a demo of the whole centre: 3 classes, 12 teachers
+and 300 students, all with made-up names, plus a quiz in every state. Log in at
+http://localhost:3000. Every account's password is `Quizora@2026`.
 
 | Account | Role | What you'll see |
 |---|---|---|
-| `teacher.rana` | Teacher | A published Arabic maths quiz for 10A and 10B |
-| `teacher.omar` | Teacher | A published English biology quiz for 11A |
-| `teacher.huda` | Teacher | A draft Arabic grammar quiz, not yet published |
-| `s10a01` … `s10a06`, `s10b01` … | Student (10A, 10B) | The maths quiz, open now |
-| `s11a01` … | Student (11A) | The biology quiz, open now |
+| `teacher.rana` | Teacher (maths) | An open quiz nobody has started, and a closed one with results for 200 students |
+| `teacher.khaled` | Teacher (physics) | A closed quiz with results for 11A |
+| `teacher.omar` | Teacher (biology) | An open quiz in English for 11A |
+| `teacher.huda` | Teacher (Arabic) | A draft, and a published quiz that opens in 3 days |
+| `teacher.lina` | Teacher (English) | The 2-minute quiz |
+| `teacher.sami`, `teacher.maha`, `teacher.yazan`, `teacher.rasha`, `teacher.bilal`, `teacher.nadia`, `teacher.tariq` | Teacher | No quizzes yet |
+| `s10a001` … `s10a100` | Student, 10A | |
+| `s10b001` … `s10b100` | Student, 10B | |
+| `s11a001` … `s11a100` | Student, 11A | Four of them have names in Latin letters |
+
+The quizzes, as they are for a few days after you run the seed (dates are relative to that
+day, so re-run it before a demo):
+
+| Quiz | Teacher | Classes | State | Time limit | A wrong answer costs |
+|---|---|---|---|---|---|
+| اختبار الرياضيات: المعادلات الخطية | rana | 10A, 10B | Open | 20 min | 25% of its points |
+| Biology: The Cell | omar | 11A | Open | 15 min | nothing |
+| مراجعة سريعة: مفردات إنجليزية | lina | all three | Open | **2 min** | 50% of its points |
+| اختبار اللغة العربية: الإملاء | huda | all three | Opens in 3 days | 15 min | nothing |
+| اختبار اللغة العربية: النحو | huda | 10A | Draft | 20 min | nothing |
+| اختبار الرياضيات: الكسور والنسب المئوية | rana | 10A, 10B | Closed, with results | 25 min | 25% of its points |
+| اختبار الفيزياء: الحركة في خط مستقيم | khaled | 11A | Closed, with results | 20 min | nothing |
+
+Nobody has started the open quizzes, so any student can take them fresh. On the closed
+quizzes, most students submitted, some ran out of time and a few never started. The first
+three students in each class have fixed outcomes on their class's closed quiz:
+
+- `…001` submitted
+- `…002` ran out of time
+- `…003` never started
+
+Everyone else's outcome is random, but the same on every run.
 
 As a teacher: create a quiz (dates, time limit, negative marking, classes), add questions
 and tap the letter of the correct answer, then publish. Other teachers can't open your
@@ -68,11 +98,10 @@ As a student:
 1. Open a quiz from the list and start it. There's one attempt, and the timer runs on the
    server.
 2. Tap an answer for each question. Answers are saved as you tap.
-3. Submit, or let the time run out.
+3. Submit, or let the time run out. The 2-minute quiz lets you see that happen quickly.
 
 The result page shows your score out of the maximum, and how many questions you answered.
-On the sample maths quiz, a wrong answer costs 25% of that question's points; a blank one
-costs nothing.
+A blank answer never costs anything, and a total never goes below 0.
 
 Starting a sample quiz locks its questions for the teacher. `npm run db:seed` resets
 everything.
