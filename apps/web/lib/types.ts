@@ -69,6 +69,8 @@ export type StudentQuiz = {
   questionCount: number;
   totalPoints: number;
   state: StudentQuizState;
+  score: number | null; // the student's own score, once FINISHED
+  maxScore: number | null;
 };
 
 export type AttemptStatus = "IN_PROGRESS" | "SUBMITTED" | "EXPIRED";
@@ -107,4 +109,54 @@ export type AttemptView = {
   maxScore: number | null;
   questions?: AttemptQuestion[];
   answers?: SavedAnswer[];
+};
+
+// --- Teacher results (GET /teacher/quizzes/:id/results) ---
+
+export type ResultStatus = "NOT_STARTED" | AttemptStatus;
+
+export type QuizResults = {
+  quiz: {
+    id: string;
+    title: string;
+    opensAt: string;
+    closesAt: string;
+    timeLimitMinutes: number;
+    negativeMarkPercent: number;
+    publishedAt: string | null;
+    classes: ClassRef[];
+    questionCount: number;
+    maxScore: number;
+  };
+  summary: {
+    students: number;
+    notStarted: number;
+    inProgress: number;
+    submitted: number;
+    expired: number;
+    scored: number;
+    average: number | null;
+    highest: number | null;
+    lowest: number | null;
+  };
+  questions: {
+    id: string;
+    position: number;
+    text: string;
+    points: number;
+    correct: number;
+    wrong: number;
+    unanswered: number;
+  }[];
+  students: {
+    id: string;
+    fullName: string;
+    username: string;
+    className: string | null;
+    status: ResultStatus;
+    score: number | null;
+    answeredCount: number;
+    startedAt: string | null;
+    finishedAt: string | null;
+  }[];
 };

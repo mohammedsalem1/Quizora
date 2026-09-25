@@ -10,7 +10,7 @@ import {
   type QuizSettingsPayload,
 } from "@/components/QuizSettingsForm";
 import { QuizStatusBadge } from "@/components/QuizStatusBadge";
-import { Alert, Button, ErrorList } from "@/components/ui";
+import { Alert, Button, buttonClass, ErrorList } from "@/components/ui";
 import { ApiError, apiFetch, errorMessagesOf } from "@/lib/api";
 import { ATTEMPTS, countLabel, MINUTES, POINTS } from "@/lib/arabic";
 import { formatDateTime } from "@/lib/dates";
@@ -174,6 +174,14 @@ export default function QuizEditorPage() {
           <p dir="auto" className="text-ink-muted">
             {quiz.description}
           </p>
+        )}
+        {quiz.publishedAt && (
+          <Link
+            href={`${path}/results`}
+            className={`${buttonClass("secondary")} self-start`}
+          >
+            عرض النتائج
+          </Link>
         )}
       </header>
 

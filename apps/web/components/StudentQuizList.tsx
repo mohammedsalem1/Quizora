@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, errorMessagesOf } from "@/lib/api";
 import { countLabel, MINUTES, QUESTIONS } from "@/lib/arabic";
+import { formatPoints } from "@/lib/numbers";
 import type { StudentQuiz, StudentQuizState } from "@/lib/types";
 import { keyDate, StudentQuizStateBadge } from "./StudentQuizState";
 import { ErrorList } from "./ui";
@@ -81,6 +82,12 @@ export function StudentQuizList() {
                     <StudentQuizStateBadge state={quiz.state} />
                   </span>
                   <span className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
+                    {quiz.score !== null && quiz.maxScore !== null && (
+                      <span className="font-medium text-ink">
+                        علامتك <bdi>{formatPoints(quiz.score)}</bdi> من{" "}
+                        <bdi>{formatPoints(quiz.maxScore)}</bdi>
+                      </span>
+                    )}
                     <span>{countLabel(quiz.questionCount, QUESTIONS)}</span>
                     <span>{countLabel(quiz.timeLimitMinutes, MINUTES)}</span>
                     <span>{keyDate(quiz)}</span>
