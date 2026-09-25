@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 // Small shared building blocks. Everything is at least 44px tall so it's easy to tap, and
 // buttons change colour when pressed (phones have no hover) without shifting the layout.
@@ -7,7 +7,7 @@ type ButtonVariant = "primary" | "secondary" | "danger" | "quiet";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-accent text-white hover:bg-accent-strong active:bg-accent-deep disabled:bg-accent/50",
+    "bg-accent text-white hover:bg-accent-strong active:bg-accent-deep disabled:bg-ink-muted",
   secondary:
     "border border-line bg-surface text-ink hover:bg-paper active:bg-line/60 disabled:text-ink-muted",
   danger:
@@ -26,7 +26,7 @@ export function buttonClass(
   size: ButtonSize = "md",
 ) {
   const padding = size === "compact" ? "min-w-11 px-2" : "px-4";
-  return `inline-flex min-h-11 ${padding} cursor-pointer items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]}`;
+  return `inline-flex min-h-11 ${padding} cursor-pointer items-center justify-center gap-2 rounded-lg whitespace-nowrap text-base font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]}`;
 }
 
 export function Button({
@@ -35,7 +35,7 @@ export function Button({
   className = "",
   type = "button",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+}: ComponentProps<"button"> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
 }) {
@@ -49,7 +49,7 @@ export function Button({
 }
 
 export const inputClass =
-  "min-h-11 w-full rounded-lg border border-line bg-surface px-3 py-2 text-base text-ink placeholder:text-ink-muted/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-paper disabled:text-ink-muted aria-invalid:border-danger";
+  "min-h-11 w-full rounded-lg border border-ink-muted/80 bg-surface px-3 py-2 text-base text-ink placeholder:text-ink-muted/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-paper disabled:text-ink-muted aria-invalid:border-danger";
 
 // The id of a field's hint or error text. Give it to the input as aria-describedby so screen
 // readers announce the message with the field.
@@ -184,7 +184,9 @@ export function Bubble({
   );
 }
 
-export function Logo() {
+// `compact`: on very narrow phones (under 360px) only the bubbles show, leaving room in the
+// header for the user's name. The name stays available to screen readers.
+export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2" aria-label="Quizora">
       <span className="flex gap-1" aria-hidden>
@@ -192,7 +194,10 @@ export function Logo() {
         <Bubble letter="" size="sm" filled />
         <Bubble letter="" size="sm" />
       </span>
-      <span dir="ltr" className="text-lg font-semibold tracking-tight">
+      <span
+        dir="ltr"
+        className={`text-lg font-semibold tracking-tight ${compact ? "max-[359px]:sr-only" : ""}`}
+      >
         Quizora
       </span>
     </span>

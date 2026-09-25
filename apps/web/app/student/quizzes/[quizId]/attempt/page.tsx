@@ -59,7 +59,7 @@ export default function AttemptPage() {
         </Alert>
         <Link
           href={`/student/quizzes/${quizId}`}
-          className="self-start rounded-lg py-2 text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+          className="inline-flex min-h-11 items-center self-start rounded-lg text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
         >
           العودة إلى صفحة الاختبار
         </Link>
@@ -111,6 +111,26 @@ function TakingQuiz({
   const [phase, setPhase] = useState<Phase>("answering");
   const [submitError, setSubmitError] = useState<string[] | null>(null);
   const [announcement, setAnnouncement] = useState("");
+
+  // The confirmation replaces the button that opened it, and the other way round: move focus
+  // along with it, or it would fall back to the top of the page (and a screen reader would
+  // say nothing) while the timer runs.
+  const confirmText = useRef<HTMLParagraphElement>(null);
+  const submitButton = useRef<HTMLButtonElement>(null);
+  const previousPhase = useRef<Phase>("answering");
+  useEffect(() => {
+    const before = previousPhase.current;
+    if (phase === "confirming" && before === "answering") {
+      confirmText.current?.focus();
+    }
+    if (
+      phase === "answering" &&
+      (before === "confirming" || before === "submitting")
+    ) {
+      submitButton.current?.focus();
+    }
+    previousPhase.current = phase;
+  }, [phase]);
 
   const goToResult = useCallback(
     () => router.replace(resultPath),
@@ -249,7 +269,7 @@ function TakingQuiz({
       <div className="sticky top-0 z-10 -mx-4 border-b border-line bg-surface/95 px-4 py-2 backdrop-blur-sm">
         <div className="flex min-h-11 items-center justify-between gap-3">
           <Countdown remainingMs={remainingMs} />
-          <span className="text-sm text-ink-muted">
+          <span className="text-sm whitespace-nowrap text-ink-muted">
             أجبت عن <bdi>{answeredCount}</bdi> من <bdi>{questions.length}</bdi>
           </span>
         </div>
@@ -266,8 +286,8 @@ function TakingQuiz({
           {quiz.negativeMarkPercent > 0 ? (
             <>
               الإجابة الخاطئة تُنقص <bdi>{quiz.negativeMarkPercent}%</bdi> من
-              علامة سؤالها، والسؤال المتروك لا يُنقص شيئاً. إن لم تكن متأكداً
-              يمكنك مسح إجابتك.
+              علامة سؤالها، والسؤال المتروك لا يُنقص شيئاً، ولا تقلّ علامة
+              الاختبار عن صفر. إن لم تكن متأكداً يمكنك مسح إجابتك.
             </>
           ) : (
             "تُحفظ كل إجابة فور اختيارها، ويمكنك تغييرها قبل التسليم."
@@ -296,7 +316,11 @@ function TakingQuiz({
         <ErrorList messages={submitError} />
         {phase === "confirming" || phase === "submitting" ? (
           <div className="flex flex-col gap-3">
-            <p className="font-medium leading-7">
+            <p
+              ref={confirmText}
+              tabIndex={-1}
+              className="font-medium leading-7 focus:outline-none"
+            >
               أجبت عن <bdi>{answeredCount}</bdi> من{" "}
               <bdi>{questions.length}</bdi>.{" "}
               {unanswered > 0 &&
@@ -321,6 +345,7 @@ function TakingQuiz({
           </div>
         ) : (
           <Button
+            ref={submitButton}
             className="self-start"
             onClick={() => setPhase("confirming")}
             disabled={locked || pending}

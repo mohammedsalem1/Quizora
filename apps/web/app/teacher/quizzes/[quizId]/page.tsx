@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { ClassNames } from "@/components/ClassNames";
 import { QuestionCard } from "@/components/QuestionCard";
 import { QuestionForm, type QuestionPayload } from "@/components/QuestionForm";
 import {
@@ -214,7 +215,7 @@ export default function QuizEditorPage() {
             onCancel={() => open("view")}
           />
         ) : (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-1 min-[360px]:grid-cols-[auto_1fr] min-[360px]:gap-y-2">
             <Fact label="يُفتح">{formatDateTime(quiz.opensAt)}</Fact>
             <Fact label="يُغلق">{formatDateTime(quiz.closesAt)}</Fact>
             <Fact label="المدة">
@@ -231,7 +232,7 @@ export default function QuizEditorPage() {
               )}
             </Fact>
             <Fact label="الصفوف">
-              <bdi>{quiz.classes.map((c) => c.name).join("، ")}</bdi>
+              <ClassNames classes={quiz.classes} />
             </Fact>
             <Fact label="النشر">
               {quiz.publishedAt
@@ -328,7 +329,7 @@ function Page({ children }: { children: ReactNode }) {
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
       <Link
         href="/teacher"
-        className="self-start rounded-lg py-2 text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+        className="inline-flex min-h-11 items-center self-start rounded-lg text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
       >
         العودة إلى اختباراتي
       </Link>
@@ -368,7 +369,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-ink-muted">{label}</dt>
-      <dd>{children}</dd>
+      <dd className="max-[359px]:mb-2">{children}</dd>
     </>
   );
 }

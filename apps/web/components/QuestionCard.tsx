@@ -22,7 +22,9 @@ export function QuestionCard({
       <div className="flex items-start justify-between gap-3">
         <h3 className="flex gap-2 font-medium leading-7">
           <span className="text-ink-muted">{number}.</span>
-          <span dir="auto">{question.text}</span>
+          <span dir="auto" className="whitespace-pre-line">
+            {question.text}
+          </span>
         </h3>
         <span className="shrink-0 text-sm text-ink-muted">
           {countLabel(question.points, POINTS)}

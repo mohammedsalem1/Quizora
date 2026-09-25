@@ -34,7 +34,7 @@ export default function NewQuizPage() {
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
       <Link
         href="/teacher"
-        className="self-start rounded-lg py-2 text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+        className="inline-flex min-h-11 items-center self-start rounded-lg text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
       >
         العودة إلى اختباراتي
       </Link>
