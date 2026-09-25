@@ -302,6 +302,114 @@ never included. The student gets the questions only when they start the quiz (Ph
 - The human chose this over the two alternatives: recalculating running attempts when the
   date changes, or refusing closing-date changes once attempts exist.
 
+## Phase 7 — Student quiz flow
+
+**Scope, agreed with the human before building:**
+- **Phase 7:** the whole flow, with the server enforcing the deadline.
+- **Phase 8:** marking expired attempts in the database, behaviour on reconnect, and race
+  and edge-case tests.
+- **Phase 9:** scoring. Until then `score` is `null`.
+
+### API
+
+Every route requires the STUDENT role. A student has at most one attempt per quiz, so the
+attempt is addressed by its quiz. Whose attempt it is always comes from the login.
+
+| Route | Purpose |
+|---|---|
+| `POST /student/quizzes/:id/attempt` | Start the attempt, or resume it if it's still running |
+| `GET /student/quizzes/:id/attempt` | The attempt: status, deadline, server time; plus questions and saved answers while it runs |
+| `PUT /student/quizzes/:id/attempt/answers/:questionId` | Save or change an answer (`{ "optionId": … }`) |
+| `DELETE /student/quizzes/:id/attempt/answers/:questionId` | Clear an answer |
+| `POST /student/quizzes/:id/attempt/submit` | Submit |
+
+### Decisions
+
+- **Starting a quiz follows the Phase 6 rules.**
+  - It first locks the quiz row with `SELECT … FOR SHARE`, so it can't interleave with a
+    teacher's edit.
+  - It then checks the quiz with the same `quizAvailability()` the list uses.
+  - The deadline is computed once, as agreed.
+  - Starting again resumes the same attempt.
+  - If the same student starts twice at the same moment, the unique index lets one insert
+    through, and the other request resumes that attempt.
+- **Error codes:**
+  - 409 when the quiz is visible but the action isn't allowed now: it isn't open yet, it's
+    closed, or the student already took it.
+  - 404, as in Phase 6, when the student can't see the quiz, or has no attempt on it.
+- **Answers are saved one at a time per attempt.**
+  - Each save and the submit lock the attempt row (`FOR UPDATE`), so nothing can be saved
+    after the attempt is submitted.
+  - The deadline is checked with the server's clock, read after the lock is taken.
+  - The question must belong to the quiz (404), and the option to the question (400).
+  - Students can clear an answer. That matters when wrong answers cost points.
+- **Submitting is repeatable.** A second submit returns the same result. That covers double
+  taps and lost responses, even after the deadline, as long as the first submit was in time.
+  A first submit after the deadline gets 409.
+- **The status a student sees is the effective one.** An attempt past its deadline shows as
+  `EXPIRED`, even though its row still says `IN_PROGRESS` until Phase 8 writes it.
+- **Questions go out only while the attempt runs.** Correct answers never do, not even after
+  submitting: nobody asked for that, and classmates may still be taking the quiz. What results
+  show is Phase 10's decision.
+- **All time decisions use the API server's clock.**
+  - `startedAt` is set by the API, not by the database default.
+  - Every deadline check uses the API's clock.
+  - On this machine, the Docker database's clock ran about 75 seconds ahead of Windows.
+    Mixing the two clocks would have given every attempt 75 extra seconds.
+- **No grace period.** An answer that reaches the server after the deadline is refused. The
+  page's countdown errs on the early side (below). Phase 8 can revisit this.
+- **Note for Phase 9:** `score` and `pointsAwarded` are `Decimal` columns, which Prisma sends
+  as strings in JSON. The response should convert them to numbers, since the web app expects
+  `number | null`.
+
+### Student pages (web)
+
+- **Pages:**
+  - My quizzes, grouped into available now, upcoming and past.
+  - Quiz details. Starting needs a confirmation that there is one attempt and that the timer
+    can't be paused.
+  - The quiz page.
+  - The result: how many questions were answered, and the score once Phase 9 adds it.
+- **The quiz page is one scrolling page.** A sticky bar shows the countdown and "answered X of
+  Y". Each option is a native radio button drawn as an answer-sheet bubble, and screen readers
+  also hear its letter.
+- **Saving answers on a phone network** (`lib/useAnswerSync.ts`, reworked after two reviews):
+  - Each question has at most one request in flight. When it finishes, the latest tap is
+    sent, so the server always ends with the student's last choice.
+  - A lost response (offline, 502, 5xx) is retried, not undone, because the answer may have
+    been saved. After a lost response, the latest choice is sent again even if it matches
+    the last confirmed one.
+  - Only a definite refusal (4xx) puts the question back to what the server confirmed.
+    A 409 means the attempt is over, so the page goes to the result page.
+  - Submitting waits until every save has finished.
+  - Leaving the page with an unsaved answer asks for confirmation. When the app itself sends
+    the student to the login page, it doesn't ask.
+  - When the phone wakes up, the page checks the server. It never overwrites a question that
+    changed after that check was sent.
+- **The countdown:**
+  - The page measures the server's clock from before its request, so network delay makes
+    it show a little less time, never more.
+  - It's recomputed from the clock every second, so it stays right after the phone sleeps.
+  - At zero, the page lets saves in flight finish, asks the server, and then moves to the
+    result page.
+- **Automatic moves replace the current page in the history**, so the back button never
+  bounces between the quiz and its result.
+
+### Deliberately left out
+
+- **Phase 8:** marking expired attempts in the database and reconnect/race tests.
+- **Phase 9:** the score.
+- **Not in the brief:** showing correct answers after submitting, one question per screen,
+  and a grace period after the deadline.
+
+### Known limitations
+
+- **An answer that never reaches the server is lost.** If the phone stays offline until the
+  time runs out, answers it tapped but couldn't send don't count. Each such question shows
+  "not saved yet, retrying" while the page keeps trying.
+- **No automated frontend tests**, as in the frontend pass before Phase 6. The pages were
+  checked in a headless browser (see `AI_USAGE.md`).
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested

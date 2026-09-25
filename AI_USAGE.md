@@ -211,3 +211,65 @@ Honest account of how AI tools were used on this project. Updated as work progre
   - The human's `npm run dev:api` was running in watch mode, so it rebuilt and restarted
     each time a mutation touched `src/`. It ended on the restored code. Mutation checks
     should be run while the dev API is stopped.
+
+## Phase 7 — Student quiz flow
+
+- **Scope.** Phase 7 overlaps Phase 8 (timer protection) and Phase 9 (scoring). The AI asked
+  how to split them and offered three options. The human chose "the flow plus server-side
+  deadline checks; the score comes in Phase 9".
+- **Design critique before code.** The AI wrote the API and page design to a file, then had a
+  workflow of 23 read-only sub-agents attack it: 4 critics and a separate verifier for each
+  finding.
+  - 19 findings were raised and 12 survived verification, all of them about the web client.
+    They covered answers saved out of order, a lost response treated as a failure, submit
+    overtaking saves still in flight, how the timer's clock offset is measured, the phone
+    sleeping, and redirects that trap the back button.
+  - The API design didn't change. The page and save logic were built around those findings.
+- **What the AI wrote:**
+  - five API routes, with 24 e2e tests and 6 unit tests
+  - four student pages
+  - the answer-saving hook
+- **Code review after writing.** Another workflow of 23 read-only sub-agents reviewed the
+  code: 5 reviewers, and a verifier for each finding.
+  - 18 findings were raised and 12 survived, again all in the web client. All 12 were fixed.
+    The most serious (high) was a lost response followed by a tap back to the previous
+    answer: the page never resent it, so the server kept the other answer.
+  - Two refuted findings were missing tests, not bugs: moving the closing date earlier, and
+    retrying a submit after the deadline. The AI added those tests anyway, because they guard
+    the deadline rule the human chose.
+- **Mutation checks.** They ran in an isolated copy of the API, so the human's dev API
+  (watch mode) never loaded mutated code. That followed the lesson recorded in Phase 6.
+  - 14 protections were broken on purpose, one at a time. The first batch of 13 caught 12.
+  - The double-start test didn't actually overlap the two requests, so the duplicate-insert
+    handling was never exercised. The AI rewrote it to hold the quiz row locked, the way a
+    teacher's edit does, so both starts run together.
+  - It also added a test that a start waits for a teacher's edit and uses the edited time
+    limit. Removing the `FOR SHARE` lock now fails that test.
+  - All 14 are now caught.
+- **Browser checks.** A scratch script drove headless Edge at 375px over the DevTools
+  protocol. It ran against separate servers on ports 3100/3101 and the test database, not the
+  human's dev servers or data. It covered:
+  - start, answer, change and clear, each checked against what the server stored
+  - five rapid re-taps, which end on the last one
+  - going offline, where the tap is kept and saved after reconnecting
+  - a response lost after the server saved it, followed by a tap back, where the server ends
+    on the tap back
+  - a refresh, which restores the answers
+  - the submit confirmation, the result page, and the back button
+  - the countdown turning red, the automatic move to the result page at zero, and a late save
+    refused with 409
+  - no horizontal overflow and no console errors
+  - The screenshots were reviewed. That found a wrapped "clear answer" button and an Arabic
+    grammar slip, and both were fixed.
+- **Mistakes caught along the way:**
+  - In the browser check, the AI first set a test deadline with the database's `now()`. The
+    Docker VM's clock was about 75 seconds ahead of Windows, so the deadline looked broken.
+    Tracing it showed the app was right, because it uses only the API's clock; the test was
+    fixed. The AI's first measurement of the drift was also wrong (Git Bash's `date` has no
+    `%N`) and was redone.
+  - Formatting a glob of components rewrote line endings in eight files the AI hadn't changed.
+    They were restored so the commit holds only real changes.
+  - Lint caught `Date.now()` being called during rendering in the early-closing warning. The
+    warning was later replaced by a rule that needs no clock.
+  - Adding the new module under `apps/api/src` made the human's dev API rebuild and restart.
+    That was expected, and it now serves the new routes.
