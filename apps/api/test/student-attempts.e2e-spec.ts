@@ -22,7 +22,8 @@ type AttemptView = {
     totalPoints: number;
   };
   answeredCount: number;
-  score: null;
+  score: number | null;
+  maxScore: number | null;
   questions?: {
     id: string;
     text: string;
@@ -93,6 +94,8 @@ describe('Student attempts (e2e)', () => {
       opensAt?: Date;
       closesAt?: Date;
       timeLimitMinutes?: number;
+      negativeMarkPercent?: number;
+      correctListedSecond?: boolean;
       published?: boolean;
     } = {},
   ): Promise<TestQuiz> {
@@ -103,7 +106,7 @@ describe('Student attempts (e2e)', () => {
         opensAt: options.opensAt ?? hoursFromNow(-1),
         closesAt: options.closesAt ?? hoursFromNow(24),
         timeLimitMinutes: options.timeLimitMinutes ?? 20,
-        negativeMarkPercent: 25,
+        negativeMarkPercent: options.negativeMarkPercent ?? 25,
         publishedAt: options.published === false ? null : hoursFromNow(-48),
         classes: {
           create: (options.classIds ?? [class10A]).map((classId) => ({
@@ -116,10 +119,17 @@ describe('Student attempts (e2e)', () => {
             points,
             position: i + 1,
             options: {
-              create: [
-                { text: `صحيح ${i + 1}`, isCorrect: true, position: 1 },
-                { text: `خطأ ${i + 1}`, isCorrect: false, position: 2 },
-              ],
+              // Correct first by default. correctListedSecond puts it second both in position
+              // and in insertion order, so "the first option" can never pass for "the correct one".
+              create: options.correctListedSecond
+                ? [
+                    { text: `خطأ ${i + 1}`, isCorrect: false, position: 1 },
+                    { text: `صحيح ${i + 1}`, isCorrect: true, position: 2 },
+                  ]
+                : [
+                    { text: `صحيح ${i + 1}`, isCorrect: true, position: 1 },
+                    { text: `خطأ ${i + 1}`, isCorrect: false, position: 2 },
+                  ],
             },
           })),
         },
@@ -703,7 +713,7 @@ describe('Student attempts (e2e)', () => {
   });
 
   describe('submitting', () => {
-    it('submits: status SUBMITTED, questions no longer sent, no score yet', async () => {
+    it('submits: status SUBMITTED, questions no longer sent, scored', async () => {
       const quiz = await createQuiz();
       await startOk(quiz.id);
       const [q1] = quiz.questions;
@@ -719,7 +729,8 @@ describe('Student attempts (e2e)', () => {
       expect(view.status).toBe('SUBMITTED');
       expect(view.submittedAt).not.toBeNull();
       expect(view.answeredCount).toBe(1);
-      expect(view.score).toBeNull();
+      expect(view.score).toBe(2); // q1 (2 points) answered correctly
+      expect(view.maxScore).toBe(5);
       expect(view.questions).toBeUndefined();
       expect(view.answers).toBeUndefined();
       expect(res.text).not.toContain('سؤال 1');
@@ -1015,10 +1026,19 @@ describe('Student attempts (e2e)', () => {
       startedAt: Date;
       expiresAt: Date;
       submittedAt: Date | null;
+      score?: number | null;
+      maxScore?: number | null;
     }) {
       const quiz = await createQuiz();
+      const finished = data.status !== 'IN_PROGRESS';
       return prisma.quizAttempt.create({
-        data: { quizId: quiz.id, studentId: studentIds.b1, ...data },
+        data: {
+          quizId: quiz.id,
+          studentId: studentIds.b1,
+          score: finished ? 0 : null,
+          maxScore: finished ? 5 : null,
+          ...data,
+        },
       });
     }
     const t = (minutes: number) => new Date(Date.now() + minutes * MINUTE_MS);
@@ -1063,6 +1083,167 @@ describe('Student attempts (e2e)', () => {
           submittedAt: t(-10),
         }),
       ).rejects.toThrow(/QuizAttempt_submittedAt_before_expiresAt/);
+    });
+
+    it('rejects a finished attempt without a score, and a running one with a score', async () => {
+      await expect(
+        createRawAttempt({
+          status: 'EXPIRED',
+          startedAt: t(-30),
+          expiresAt: t(-10),
+          submittedAt: null,
+          score: null,
+          maxScore: null,
+        }),
+      ).rejects.toThrow(/QuizAttempt_scored_iff_finished/);
+      await expect(
+        createRawAttempt({
+          status: 'IN_PROGRESS',
+          startedAt: t(-5),
+          expiresAt: t(15),
+          submittedAt: null,
+          score: 3,
+          maxScore: 5,
+        }),
+      ).rejects.toThrow(/QuizAttempt_scored_iff_finished/);
+    });
+
+    it('rejects a score below 0 or above the maximum', async () => {
+      for (const score of [-0.25, 5.01]) {
+        await expect(
+          createRawAttempt({
+            status: 'EXPIRED',
+            startedAt: t(-30),
+            expiresAt: t(-10),
+            submittedAt: null,
+            score,
+            maxScore: 5,
+          }),
+        ).rejects.toThrow(/QuizAttempt_score_in_range/);
+      }
+    });
+  });
+
+  // The quiz from createQuiz: question 1 is worth 2 points, question 2 is worth 3 (5 in total).
+  // Option 0 is the correct one, option 1 is wrong. Negative marking is 25% unless set.
+  describe('scoring (always on the server)', () => {
+    async function takeQuiz(
+      answers: (0 | 1 | null)[], // the chosen option per question, or null to leave it blank
+      negativeMarkPercent = 25,
+    ) {
+      const quiz = await createQuiz({ negativeMarkPercent });
+      await startOk(quiz.id);
+      for (const [i, choice] of answers.entries()) {
+        if (choice === null) continue;
+        const q = quiz.questions[i];
+        await answer(
+          quiz.id,
+          q.id,
+          { optionId: q.optionIds[choice] },
+          tokens.a1,
+        ).expect(200);
+      }
+      return quiz;
+    }
+    async function submitted(quizId: string) {
+      return (await submit(quizId, tokens.a1).expect(200)).body as AttemptView;
+    }
+    const storedAnswers = async (quizId: string) =>
+      (await rowOf(quizId, studentIds.a1)).answers
+        .map((a) => a.pointsAwarded?.toNumber())
+        .sort((x, y) => (x ?? 0) - (y ?? 0));
+
+    it('all correct: every point', async () => {
+      const quiz = await takeQuiz([0, 0]);
+      const view = await submitted(quiz.id);
+      expect([view.score, view.maxScore]).toEqual([5, 5]);
+    });
+
+    it('all incorrect with negative marking: deductions recorded, total floored at 0', async () => {
+      const quiz = await takeQuiz([1, 1]);
+      expect((await submitted(quiz.id)).score).toBe(0);
+      // −25% of 2 and −25% of 3
+      expect(await storedAnswers(quiz.id)).toEqual([-0.75, -0.5]);
+    });
+
+    it('unanswered questions earn nothing and cost nothing', async () => {
+      const blank = await takeQuiz([null, null]);
+      expect((await submitted(blank.id)).score).toBe(0);
+      const oneBlank = await takeQuiz([null, 0]);
+      expect((await submitted(oneBlank.id)).score).toBe(3);
+    });
+
+    it('mixed answers with negative marking: +2 − 25% of 3 = 1.25', async () => {
+      const quiz = await takeQuiz([0, 1]);
+      const view = await submitted(quiz.id);
+      expect(view.score).toBe(1.25);
+      expect(await storedAnswers(quiz.id)).toEqual([-0.75, 2]);
+      const row = await rowOf(quiz.id, studentIds.a1);
+      expect(row.score?.toString()).toBe('1.25');
+      expect(row.maxScore).toBe(5);
+    });
+
+    it('mixed answers without negative marking: wrong answers cost nothing', async () => {
+      const quiz = await takeQuiz([0, 1], 0);
+      expect((await submitted(quiz.id)).score).toBe(2);
+      expect(await storedAnswers(quiz.id)).toEqual([0, 2]);
+    });
+
+    it('scores an attempt whose time ran out, from the answers saved in time', async () => {
+      const quiz = await takeQuiz([0, 1]);
+      await runOutOfTime(quiz.id, studentIds.a1);
+      const view = (await getAttempt(quiz.id, tokens.a1).expect(200))
+        .body as AttemptView;
+      expect(view.status).toBe('EXPIRED');
+      expect([view.score, view.maxScore]).toEqual([1.25, 5]);
+      expect((await rowOf(quiz.id, studentIds.a1)).score?.toString()).toBe(
+        '1.25',
+      );
+    });
+
+    it('ignores a score sent by the client', async () => {
+      const quiz = await takeQuiz([1, 1]);
+      const res = await submit(quiz.id, tokens.a1)
+        .send({ score: 5, maxScore: 5, pointsAwarded: 5 })
+        .expect(200);
+      expect((res.body as AttemptView).score).toBe(0);
+    });
+
+    it('shows no score while the attempt is running', async () => {
+      const quiz = await takeQuiz([0, 0]);
+      const view = (await getAttempt(quiz.id, tokens.a1).expect(200))
+        .body as AttemptView;
+      expect([view.score, view.maxScore]).toEqual([null, null]);
+      expect(await storedAnswers(quiz.id)).toEqual([undefined, undefined]);
+    });
+
+    it('uses the option marked correct, wherever it is listed', async () => {
+      const quiz = await createQuiz({ correctListedSecond: true });
+      await startOk(quiz.id);
+      // optionIds follow the listed order: [wrong, correct] for every question here.
+      const [q1, q2] = quiz.questions;
+      await answer(
+        quiz.id,
+        q1.id,
+        { optionId: q1.optionIds[1] },
+        tokens.a1,
+      ).expect(200);
+      await answer(
+        quiz.id,
+        q2.id,
+        { optionId: q2.optionIds[0] },
+        tokens.a1,
+      ).expect(200);
+      // +2 for question 1, −25% of 3 for question 2
+      expect((await submitted(quiz.id)).score).toBe(1.25);
+    });
+
+    it('keeps the score when the attempt is read again', async () => {
+      const quiz = await takeQuiz([0, 1]);
+      await submitted(quiz.id);
+      const again = (await getAttempt(quiz.id, tokens.a1).expect(200))
+        .body as AttemptView;
+      expect([again.score, again.maxScore]).toEqual([1.25, 5]);
     });
   });
 });

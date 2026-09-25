@@ -473,6 +473,59 @@ database, adds database safety nets, and tests the edge cases.
 - **A database trigger blocking answers after a submission.** The row lock already makes the
   two happen one at a time, and that is tested.
 
+## Phase 9 — Scoring & negative marking
+
+### How a score is calculated
+
+The rules were agreed in Phase 2. The code is `scoreAttempt()` in
+`apps/api/src/attempts/scoring.ts`.
+
+| Answer | Points |
+|---|---|
+| Correct | + the question's points |
+| Wrong, negative marking off (0%) | 0 |
+| Wrong, negative marking on (p%) | − p% of **that question's** points |
+| Unanswered | 0, even with negative marking |
+
+- **The quiz total never goes below 0.** Wrong answers still count against correct ones: +3
+  and −0.5 gives 2.5. The floor only applies to the final total.
+- **Example:** a quiz with 25% negative marking and questions worth 2 and 3 points. Question
+  1 right and question 2 wrong gives 2 − 0.75 = **1.25** out of 5.
+- **Negative marking is set per quiz by its teacher** (0–100%, 0 = off), not globally.
+
+### Decisions
+
+- **No rounding.** Points and the percentage are whole numbers, so every penalty (points ×
+  percent / 100) has at most two decimals. The server counts in whole hundredths of a point,
+  so the arithmetic is exact, and results are stored as `Decimal(8,2)`. A quiz can total at
+  most 100 questions × 100 points, which fits.
+- **A score is computed only when an attempt ends,** in `finalizeAttempt()`, whether the
+  student submits or the time runs out.
+  - It writes the status, `score`, `maxScore` and each answer's `pointsAwarded` in the same
+    locked transaction.
+  - The expiry step from Phase 8 now scores each overdue attempt in its own transaction,
+    after re-checking under the row lock that it is still running. Every finished attempt is
+    therefore scored exactly once.
+- **The server is the only source of a score.** Request bodies can't set one; a test submits
+  a fake score and checks it's ignored. The score comes from the answers saved on the server
+  and the correct options stored with the quiz.
+- **Students see only their own score, and only once the attempt has ended.** Responses
+  never include `pointsAwarded`, correct answers or per-question results. The result page
+  shows the score out of the maximum and states the quiz's negative-marking rule.
+- **Database safety nets.** A new migration, `*_attempt_score_checks`, adds two CHECKs:
+  - A finished attempt has a score and a maximum, and a running one has neither.
+  - `0 ≤ score ≤ maxScore`.
+
+  They're added `NOT VALID`: Postgres enforces them on every new write, but not on rows that
+  already exist. So attempts that finished before scoring existed (only in development
+  databases) keep a null score and show "not calculated". Apply the migration with
+  `npm run db:migrate`.
+
+### Left for later phases
+
+- **Phase 10:** teacher-side results and statistics. Those need the same expiry step for a
+  whole quiz before reading scores, as noted in Phase 8.
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested

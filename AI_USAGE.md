@@ -323,3 +323,51 @@ Honest account of how AI tools were used on this project. Updated as work progre
   - One test compared a resubmission with the original submission time, but the helper had
     just moved that time into the past on purpose. The behaviour was right, and the test was
     fixed to compare with the stored value.
+
+## Phase 9 — Scoring & negative marking
+
+- **Review depth was the human's choice.** Scoring is on the human's own list of high-risk
+  areas. The AI asked, and the human chose the heavier option: 4 focused review agents, an
+  independent double-check of every MUST FIX NOW finding, and a small mutation check of the
+  scoring function only.
+- **What the AI wrote:**
+  - `scoreAttempt()`, a pure function in whole hundredths of a point, so the arithmetic is
+    exact with no rounding, with 13 unit tests
+  - `finalizeAttempt()`, the single place an attempt ends and is scored, used by the submit
+    and by the Phase 8 expiry step (which now scores each attempt under its row lock)
+  - a migration adding two score CHECKs as `NOT VALID`
+  - 11 new e2e tests
+  - the score on the result page
+- **How it was checked:**
+  - **Targeted tests:** 13 unit tests, and the attempts and student-quizzes e2e suites
+    (48 and 17 tests).
+  - **Mutation check,** in an isolated copy so the human's dev API never loaded it. Ten
+    deliberate bugs were introduced into the scoring function, one at a time:
+    - no zero floor, and flooring each step instead of the total
+    - a penalty that ignores the question's points, and one 100 times too small
+    - a correct answer worth 100 times too little
+    - duplicate answers counted
+    - `-0` stored for a wrong answer when negative marking is off
+    - the maximum counting only answered questions
+    - wrong answers earning points
+    - a penalty applied to correct answers
+
+    The unit tests caught all ten.
+- **Review.** Four read-only agents looked at the arithmetic, finalization and concurrency,
+  trust and data exposure, and tests. None classified anything MUST FIX NOW, so the
+  double-check stage had nothing to verify. The AI made the final classification and upgraded
+  two OPTIONAL findings, because both were cheap and concerned the correctness of a score:
+  - Reading an attempt took the clock twice. If the deadline fell between the two readings,
+    the response said EXPIRED with no score. Three agents found this. It now uses one reading
+    per request.
+  - Every test quiz listed the correct option first, so a scoring query that read "the first
+    option" would have passed every test. The AI added a test where the correct option is
+    second, both in position and in insertion order. Its first version only changed the
+    position, which the AI noticed would leave a first-inserted regression undetected.
+  - Not fixed now:
+    - **LATER PHASE (Phase 10):** an attempt whose student never comes back stays unscored
+      until something finalizes it.
+    - **OPTIONAL:** no test for the re-check under the row lock; one `UPDATE` per answer when
+      scoring; the zero-floor rule shown only after the attempt; one half of a CHECK untested.
+- **Final checks:** the full suite was run once: 38 unit tests and 158 e2e tests. Lint,
+  type-check and the web build were clean.

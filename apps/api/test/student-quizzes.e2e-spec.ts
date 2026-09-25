@@ -105,7 +105,7 @@ describe('Student quiz availability (e2e)', () => {
   }
 
   // An attempt that started 20 minutes before its deadline and, if SUBMITTED, was submitted
-  // a minute after starting (the database checks both are consistent).
+  // a minute after starting. A finished one has a score (the database checks all of this).
   function startAttempt(
     quizId: string,
     studentId: string,
@@ -124,6 +124,8 @@ describe('Student quiz availability (e2e)', () => {
           status === 'SUBMITTED'
             ? new Date(startedAt.getTime() + 60 * 1000)
             : null,
+        score: status === 'IN_PROGRESS' ? null : 0,
+        maxScore: status === 'IN_PROGRESS' ? null : 5,
       },
     });
   }

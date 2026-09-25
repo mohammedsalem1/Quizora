@@ -9,6 +9,11 @@ import { countLabel, POINTS } from "@/lib/arabic";
 import { formatDateTime } from "@/lib/dates";
 import type { AttemptView } from "@/lib/types";
 
+// "7.5", "7.25", "8": up to two decimals, Western digits like the rest of the interface.
+const SCORE = new Intl.NumberFormat("ar-JO-u-nu-latn", {
+  maximumFractionDigits: 2,
+});
+
 export default function AttemptResultPage() {
   const { quizId } = useParams<{ quizId: string }>();
   const router = useRouter();
@@ -82,6 +87,22 @@ export default function AttemptResultPage() {
         </p>
       </header>
 
+      {attempt.score !== null && attempt.maxScore !== null ? (
+        <p className="flex items-baseline gap-3 rounded-xl border border-line bg-surface p-4">
+          <span className="text-ink-muted">علامتك</span>
+          <span className="text-4xl font-semibold text-accent-strong tabular-nums">
+            <bdi>{SCORE.format(attempt.score)}</bdi>
+          </span>
+          <span className="text-ink-muted">
+            من <bdi>{SCORE.format(attempt.maxScore)}</bdi>
+          </span>
+        </p>
+      ) : (
+        <p className="rounded-xl border border-line bg-surface p-4 text-ink-muted">
+          لم تُحسب علامة هذه المحاولة.
+        </p>
+      )}
+
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-xl border border-line bg-surface p-4">
         <Fact label="الإجابات">
           أجبت عن <bdi>{attempt.answeredCount}</bdi> من{" "}
@@ -90,11 +111,15 @@ export default function AttemptResultPage() {
         <Fact label="المجموع الكلي">
           {countLabel(attempt.quiz.totalPoints, POINTS)}
         </Fact>
-        <Fact label="علامتك">
-          {attempt.score === null ? (
-            "لم تُحسب بعد."
+        <Fact label="العلامة السالبة">
+          {attempt.quiz.negativeMarkPercent > 0 ? (
+            <>
+              كل إجابة خاطئة أنقصت{" "}
+              <bdi>{attempt.quiz.negativeMarkPercent}%</bdi> من علامة سؤالها،
+              والمتروك لم يُنقص شيئاً. لا تقلّ العلامة عن صفر.
+            </>
           ) : (
-            <bdi>{attempt.score}</bdi>
+            "غير مفعّلة: الإجابات الخاطئة لم تُنقص شيئاً."
           )}
         </Fact>
       </dl>

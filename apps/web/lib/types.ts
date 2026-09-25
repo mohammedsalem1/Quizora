@@ -101,7 +101,10 @@ export type AttemptView = {
     totalPoints: number;
   };
   answeredCount: number;
-  score: number | null; // null until scoring exists (Phase 9)
+  // Computed by the server when the attempt ends; null while it runs (and for attempts that
+  // ended before scoring existed).
+  score: number | null;
+  maxScore: number | null;
   questions?: AttemptQuestion[];
   answers?: SavedAnswer[];
 };

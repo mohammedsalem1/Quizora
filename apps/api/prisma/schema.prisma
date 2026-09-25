@@ -12,6 +12,9 @@
 //   - CHECK: QuizAttempt.expiresAt > startedAt
 //   - CHECK: status is SUBMITTED exactly when submittedAt is set
 //   - CHECK: submittedAt < expiresAt (no submission after the deadline)
+// and in prisma/migrations/*_attempt_score_checks/migration.sql (Phase 9, NOT VALID):
+//   - CHECK: a finished attempt has score and maxScore, a running one has neither
+//   - CHECK: 0 <= score <= maxScore
 
 generator client {
   provider            = "prisma-client"
