@@ -206,11 +206,47 @@ describe('Student attempts (e2e)', () => {
     throw new Error(`Expected ${count} sessions waiting for a lock`);
   }
 
-  // Moves an attempt's deadline into the past, as if its time had run out.
-  const runOutOfTime = (quizId: string, studentId: string) =>
-    prisma.quizAttempt.update({
+  // Moves an attempt into the past so that its deadline was a minute ago, as if the student
+  // had started earlier. Start, deadline and submission time move together, so the row stays
+  // consistent (the database checks it).
+  async function runOutOfTime(quizId: string, studentId: string) {
+    const attempt = await prisma.quizAttempt.findUniqueOrThrow({
       where: { quizId_studentId: { quizId, studentId } },
-      data: { expiresAt: new Date(Date.now() - MINUTE_MS) },
+    });
+    const shift = attempt.expiresAt.getTime() - Date.now() + MINUTE_MS;
+    const earlier = (date: Date) => new Date(date.getTime() - shift);
+    await prisma.quizAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        startedAt: earlier(attempt.startedAt),
+        expiresAt: earlier(attempt.expiresAt),
+        submittedAt: attempt.submittedAt && earlier(attempt.submittedAt),
+      },
+    });
+  }
+
+  // Locks an attempt's row until release() is called, so requests queue behind it in the
+  // order they arrive (the same lock answer saves and the submit take).
+  function holdAttemptRow(quizId: string, studentId: string) {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const done = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`
+          SELECT id FROM "QuizAttempt"
+          WHERE "quizId" = ${quizId} AND "studentId" = ${studentId}
+          FOR UPDATE`;
+        await released;
+      },
+      { timeout: 20_000 },
+    );
+    return { release, done };
+  }
+
+  const rowOf = (quizId: string, studentId: string) =>
+    prisma.quizAttempt.findUniqueOrThrow({
+      where: { quizId_studentId: { quizId, studentId } },
+      include: { answers: true },
     });
 
   describe('access', () => {
@@ -710,13 +746,16 @@ describe('Student attempts (e2e)', () => {
       // A last-second submit whose response was lost is retried after the deadline.
       const quiz = await createQuiz();
       await startOk(quiz.id);
-      const first = (await submit(quiz.id, tokens.a1).expect(200))
-        .body as AttemptView;
+      await submit(quiz.id, tokens.a1).expect(200);
       await runOutOfTime(quiz.id, studentIds.a1);
+      const stored = await rowOf(quiz.id, studentIds.a1);
       const retry = (await submit(quiz.id, tokens.a1).expect(200))
         .body as AttemptView;
       expect(retry.status).toBe('SUBMITTED');
-      expect(retry.submittedAt).toBe(first.submittedAt);
+      expect(retry.submittedAt).toBe(stored.submittedAt?.toISOString());
+      expect((await rowOf(quiz.id, studentIds.a1)).submittedAt).toEqual(
+        stored.submittedAt,
+      );
     });
 
     it('refuses to submit after the time is up; the attempt shows as EXPIRED', async () => {
@@ -742,6 +781,288 @@ describe('Student attempts (e2e)', () => {
     it('needs a started attempt', async () => {
       const quiz = await createQuiz();
       await submit(quiz.id, tokens.a1).expect(404);
+    });
+  });
+
+  describe('when the time is up', () => {
+    it('records EXPIRED on the next request and keeps the answers saved in time', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      const [q1] = quiz.questions;
+      await answer(
+        quiz.id,
+        q1.id,
+        { optionId: q1.optionIds[1] },
+        tokens.a1,
+      ).expect(200);
+      await runOutOfTime(quiz.id, studentIds.a1);
+      expect((await rowOf(quiz.id, studentIds.a1)).status).toBe('IN_PROGRESS');
+
+      const view = (await getAttempt(quiz.id, tokens.a1).expect(200))
+        .body as AttemptView;
+      expect(view.status).toBe('EXPIRED');
+      expect(view.answeredCount).toBe(1);
+
+      const row = await rowOf(quiz.id, studentIds.a1);
+      expect(row.status).toBe('EXPIRED');
+      expect(row.submittedAt).toBeNull();
+      expect(row.answers.map((a) => a.optionId)).toEqual([q1.optionIds[1]]);
+    });
+
+    it('is recorded by any request from the student, e.g. the quiz list', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      await runOutOfTime(quiz.id, studentIds.a1);
+      await server()
+        .get('/student/quizzes')
+        .set('Authorization', `Bearer ${tokens.a1}`)
+        .expect(200);
+      expect((await rowOf(quiz.id, studentIds.a1)).status).toBe('EXPIRED');
+    });
+
+    it('never turns a submitted attempt into an expired one', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      const submitted = (await submit(quiz.id, tokens.a1).expect(200))
+        .body as AttemptView;
+      await runOutOfTime(quiz.id, studentIds.a1);
+
+      await getAttempt(quiz.id, tokens.a1).expect(200);
+      const row = await rowOf(quiz.id, studentIds.a1);
+      expect(row.status).toBe('SUBMITTED');
+      expect(row.submittedAt).not.toBeNull();
+      expect(submitted.status).toBe('SUBMITTED');
+    });
+
+    it('refuses answers, submission and a new start once expired, and changes nothing', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      const [q1] = quiz.questions;
+      await runOutOfTime(quiz.id, studentIds.a1);
+      await getAttempt(quiz.id, tokens.a1).expect(200); // now stored as EXPIRED
+
+      await answer(
+        quiz.id,
+        q1.id,
+        { optionId: q1.optionIds[0] },
+        tokens.a1,
+      ).expect(409);
+      await clear(quiz.id, q1.id, tokens.a1).expect(409);
+      await submit(quiz.id, tokens.a1).expect(409);
+      await start(quiz.id, tokens.a1).expect(409);
+
+      const row = await rowOf(quiz.id, studentIds.a1);
+      expect(row.status).toBe('EXPIRED');
+      expect(row.submittedAt).toBeNull();
+      expect(row.answers).toEqual([]);
+      expect(
+        await prisma.quizAttempt.count({ where: { quizId: quiz.id } }),
+      ).toBe(1);
+    });
+  });
+
+  describe('the clock belongs to the server', () => {
+    it('ignores times and limits sent with a start', async () => {
+      const quiz = await createQuiz({ timeLimitMinutes: 20 });
+      const res = await start(quiz.id, tokens.a1)
+        .send({
+          startedAt: new Date(Date.now() + 60 * MINUTE_MS).toISOString(),
+          expiresAt: new Date(Date.now() + 24 * 60 * MINUTE_MS).toISOString(),
+          timeLimitMinutes: 999,
+        })
+        .expect(200);
+      const view = res.body as AttemptView;
+      expect(
+        new Date(view.expiresAt).getTime() - new Date(view.startedAt).getTime(),
+      ).toBe(20 * MINUTE_MS);
+      expect(
+        Math.abs(new Date(view.startedAt).getTime() - Date.now()),
+      ).toBeLessThan(MINUTE_MS);
+    });
+
+    it('rejects times sent with an answer, and ignores them on a late submit', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      const [q1] = quiz.questions;
+      await answer(
+        quiz.id,
+        q1.id,
+        { optionId: q1.optionIds[0], answeredAt: new Date().toISOString() },
+        tokens.a1,
+      ).expect(400);
+
+      await runOutOfTime(quiz.id, studentIds.a1);
+      await submit(quiz.id, tokens.a1)
+        .send({
+          submittedAt: new Date(Date.now() - 60 * MINUTE_MS).toISOString(),
+        })
+        .expect(409);
+      expect((await rowOf(quiz.id, studentIds.a1)).status).toBe('EXPIRED');
+    });
+  });
+
+  describe('refresh and reconnect', () => {
+    it('gives back the same attempt, deadline and saved answers', async () => {
+      const quiz = await createQuiz();
+      const first = await startOk(quiz.id);
+      const [q1, q2] = quiz.questions;
+      await answer(
+        quiz.id,
+        q1.id,
+        { optionId: q1.optionIds[0] },
+        tokens.a1,
+      ).expect(200);
+      await answer(
+        quiz.id,
+        q2.id,
+        { optionId: q2.optionIds[1] },
+        tokens.a1,
+      ).expect(200);
+
+      // A reloaded page reads the attempt; a second device (or the details page) starts again.
+      const reloaded = (await getAttempt(quiz.id, tokens.a1).expect(200))
+        .body as AttemptView;
+      const restarted = await startOk(quiz.id);
+      for (const view of [reloaded, restarted]) {
+        expect(view.id).toBe(first.id);
+        expect(view.expiresAt).toBe(first.expiresAt);
+        expect(view.status).toBe('IN_PROGRESS');
+        expect(view.answers).toEqual(
+          expect.arrayContaining([
+            { questionId: q1.id, optionId: q1.optionIds[0] },
+            { questionId: q2.id, optionId: q2.optionIds[1] },
+          ]),
+        );
+      }
+    });
+  });
+
+  describe('races on one attempt', () => {
+    it('refuses an answer that arrives while the submit is being saved', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      const [q1] = quiz.questions;
+
+      const hold = holdAttemptRow(quiz.id, studentIds.a1);
+      const submitting = submit(quiz.id, tokens.a1).then((res) => res);
+      await waitForLockWaiters(1);
+      const answering = answer(
+        quiz.id,
+        q1.id,
+        { optionId: q1.optionIds[0] },
+        tokens.a1,
+      ).then((res) => res);
+      await waitForLockWaiters(2);
+      hold.release();
+      await hold.done;
+
+      expect((await submitting).status).toBe(200);
+      expect((await answering).status).toBe(409);
+      const row = await rowOf(quiz.id, studentIds.a1);
+      expect(row.status).toBe('SUBMITTED');
+      expect(row.answers).toEqual([]);
+    });
+
+    it('keeps an answer that arrives just before the submit', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+      const [q1] = quiz.questions;
+
+      const hold = holdAttemptRow(quiz.id, studentIds.a1);
+      const answering = answer(
+        quiz.id,
+        q1.id,
+        { optionId: q1.optionIds[0] },
+        tokens.a1,
+      ).then((res) => res);
+      await waitForLockWaiters(1);
+      const submitting = submit(quiz.id, tokens.a1).then((res) => res);
+      await waitForLockWaiters(2);
+      hold.release();
+      await hold.done;
+
+      expect((await answering).status).toBe(200);
+      const submitted = await submitting;
+      expect(submitted.status).toBe(200);
+      expect((submitted.body as AttemptView).answeredCount).toBe(1);
+      expect((await rowOf(quiz.id, studentIds.a1)).answers).toHaveLength(1);
+    });
+
+    it('submits once when two submits arrive together', async () => {
+      const quiz = await createQuiz();
+      await startOk(quiz.id);
+
+      const hold = holdAttemptRow(quiz.id, studentIds.a1);
+      const both = Promise.all([
+        submit(quiz.id, tokens.a1).then((res) => res),
+        submit(quiz.id, tokens.a1).then((res) => res),
+      ]);
+      await waitForLockWaiters(2);
+      hold.release();
+      await hold.done;
+
+      const [one, two] = await both;
+      expect([one.status, two.status]).toEqual([200, 200]);
+      expect((one.body as AttemptView).submittedAt).toBe(
+        (two.body as AttemptView).submittedAt,
+      );
+    });
+  });
+
+  describe('database safety nets (the API never gets this far)', () => {
+    async function createRawAttempt(data: {
+      status: 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED';
+      startedAt: Date;
+      expiresAt: Date;
+      submittedAt: Date | null;
+    }) {
+      const quiz = await createQuiz();
+      return prisma.quizAttempt.create({
+        data: { quizId: quiz.id, studentId: studentIds.b1, ...data },
+      });
+    }
+    const t = (minutes: number) => new Date(Date.now() + minutes * MINUTE_MS);
+
+    it('rejects a deadline that is not after the start', async () => {
+      const at = t(0);
+      await expect(
+        createRawAttempt({
+          status: 'IN_PROGRESS',
+          startedAt: at,
+          expiresAt: at,
+          submittedAt: null,
+        }),
+      ).rejects.toThrow(/QuizAttempt_expiresAt_after_startedAt/);
+    });
+
+    it('rejects a submission time that does not match the status', async () => {
+      await expect(
+        createRawAttempt({
+          status: 'SUBMITTED',
+          startedAt: t(-5),
+          expiresAt: t(15),
+          submittedAt: null,
+        }),
+      ).rejects.toThrow(/QuizAttempt_submittedAt_iff_submitted/);
+      await expect(
+        createRawAttempt({
+          status: 'EXPIRED',
+          startedAt: t(-30),
+          expiresAt: t(-10),
+          submittedAt: t(-20),
+        }),
+      ).rejects.toThrow(/QuizAttempt_submittedAt_iff_submitted/);
+    });
+
+    it('rejects a submission at or after the deadline', async () => {
+      await expect(
+        createRawAttempt({
+          status: 'SUBMITTED',
+          startedAt: t(-30),
+          expiresAt: t(-10),
+          submittedAt: t(-10),
+        }),
+      ).rejects.toThrow(/QuizAttempt_submittedAt_before_expiresAt/);
     });
   });
 });

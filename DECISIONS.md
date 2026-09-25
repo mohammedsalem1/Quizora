@@ -410,6 +410,69 @@ attempt is addressed by its quiz. Whose attempt it is always comes from the logi
 - **No automated frontend tests**, as in the frontend pass before Phase 6. The pages were
   checked in a headless browser (see `AI_USAGE.md`).
 
+## Phase 8 — Timer & attempt protection
+
+Most of the brief was already in place after Phase 7: a deadline set by the server, one
+attempt per student, and refusing late answers and submissions. Phase 8 records expiry in the
+database, adds database safety nets, and tests the edge cases.
+
+### Decisions
+
+- **Expired attempts are recorded when the student next makes a request.**
+  - Every student request about quizzes or attempts first runs one conditional
+    `UPDATE`, using the API's clock. It marks that student's overdue `IN_PROGRESS` attempts
+    as `EXPIRED`. There's no background job (Phase 2).
+  - It can't overwrite a submission. A submit and this update both need the row lock, and
+    Postgres re-checks `status = IN_PROGRESS` after waiting, so an attempt submitted in time
+    stays `SUBMITTED`.
+  - Until then the row may still say `IN_PROGRESS`. Everything a student sees already uses
+    the effective status, so nothing depends on when the row catches up.
+- **Database safety nets.** A new migration, `*_attempt_checks`, adds three CHECKs:
+  - the deadline is after the start
+  - the status is `SUBMITTED` exactly when `submittedAt` is set
+  - `submittedAt` is before the deadline, so even a bug in the API couldn't store a late
+    submission
+
+  Apply it to the development database with `npm run db:migrate`. The tests apply it
+  automatically.
+- **What enforces each rule in the brief:**
+
+  | Rule | Enforced by |
+  |---|---|
+  | A student can't take the same quiz twice | The unique `(quizId, studentId)` index; a start refuses a finished attempt (409); two simultaneous starts resume the one attempt |
+  | An expired attempt can't be submitted normally | The server-clock check under the attempt's row lock (409), and the `submittedAt < expiresAt` CHECK |
+  | The client can't extend the timer | The deadline is computed by the server at start and never recalculated; a start ignores its body; answer bodies reject unknown fields; the page's countdown is display only |
+  | Refresh and reconnect behave the same way | The attempt is found by quiz and student; starting again resumes it with the same deadline and saved answers; the page re-checks when the phone wakes (Phase 7) |
+  | Nothing is saved after submitting | Answer saves and the submit take the attempt's row lock one at a time (tested in both orders) |
+
+- **Test data is now realistic.** Fixtures start an attempt before its deadline and submit it
+  before the deadline. The helper that makes the time run out moves the whole attempt into
+  the past, instead of only its deadline.
+- **The e2e setup empties the test database before migrating it.** Before this, rows left
+  by an older checkout (such as Phase 7's unrealistic test rows) would have made the new
+  CHECKs fail to apply and blocked every test run.
+  - The setup truncates every table except Prisma's migration history, then runs
+    `migrate deploy` as before. Every test file already wipes the database at its start;
+    this only does it earlier.
+  - It is still limited to databases whose name ends in `_test`.
+  - `prisma migrate reset` was not used, because Prisma refuses to run it for an AI agent
+    without the user's explicit consent. That would have stopped every agent-run test.
+
+### Left for later phases
+
+- **Phase 9:** score the attempt at the two points where it ends, the submit and this expiry
+  step. The expiry step is a single `updateMany` today, so Phase 9 will need to score each
+  attempt it expires.
+- **Phase 10:** teacher-side results must run the same expiry step for a quiz's attempts
+  before reading them, since a student who never comes back never triggers it.
+
+### Deliberately left out
+
+- **A grace period after the deadline.** The brief doesn't ask for one, and the page's
+  countdown already errs on the early side.
+- **A database trigger blocking answers after a submission.** The row lock already makes the
+  two happen one at a time, and that is tested.
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested
