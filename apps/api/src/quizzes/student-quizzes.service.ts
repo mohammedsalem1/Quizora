@@ -17,7 +17,8 @@ function candidatesFor(student: AuthUser): Prisma.QuizWhereInput {
   return { publishedAt: { not: null }, OR: reasons };
 }
 
-// Only what a student needs before starting. Never questions, options or correct answers.
+// Only what a student needs before starting, and their own score once they've finished.
+// Never questions, options or correct answers.
 function selectFor(student: AuthUser) {
   return {
     id: true,
@@ -32,7 +33,7 @@ function selectFor(student: AuthUser) {
     questions: { select: { points: true } },
     attempts: {
       where: { studentId: student.id }, // this student's attempt only
-      select: { status: true, expiresAt: true },
+      select: { status: true, expiresAt: true, score: true, maxScore: true },
     },
   } satisfies Prisma.QuizSelect;
 }
@@ -55,6 +56,11 @@ function toStudentView(quiz: CandidateQuiz, student: AuthUser, now: Date) {
   );
   if (!state) return null;
 
+  // The student's own score, once they have finished (null for attempts that ended before
+  // scoring existed).
+  const finished = state === 'FINISHED' ? quiz.attempts.at(0) : undefined;
+  const score = finished?.score ?? null;
+
   return {
     id: quiz.id,
     title: quiz.title,
@@ -66,6 +72,8 @@ function toStudentView(quiz: CandidateQuiz, student: AuthUser, now: Date) {
     questionCount: quiz.questions.length,
     totalPoints: quiz.questions.reduce((sum, q) => sum + q.points, 0),
     state,
+    score: score === null ? null : score.toNumber(),
+    maxScore: score === null ? null : (finished?.maxScore ?? null),
   };
 }
 
@@ -73,14 +81,16 @@ function toStudentView(quiz: CandidateQuiz, student: AuthUser, now: Date) {
 export class StudentQuizzesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // One clock reading per request: a quiz shown as FINISHED has always been finalized (and
+  // scored) by the expiry step just before.
   async list(student: AuthUser) {
-    await expireOverdueAttempts(this.prisma, student.id, new Date());
+    const now = new Date();
+    await expireOverdueAttempts(this.prisma, { studentId: student.id }, now);
     const quizzes = await this.prisma.quiz.findMany({
       where: candidatesFor(student),
       orderBy: { opensAt: 'desc' },
       select: selectFor(student),
     });
-    const now = new Date();
     return quizzes
       .map((quiz) => toStudentView(quiz, student, now))
       .filter((view) => view !== null);
@@ -88,12 +98,13 @@ export class StudentQuizzesService {
 
   // A draft, another class's quiz and a nonexistent id all look the same: 404.
   async get(student: AuthUser, quizId: string) {
-    await expireOverdueAttempts(this.prisma, student.id, new Date());
+    const now = new Date();
+    await expireOverdueAttempts(this.prisma, { studentId: student.id }, now);
     const quiz = await this.prisma.quiz.findFirst({
       where: { id: quizId, ...candidatesFor(student) },
       select: selectFor(student),
     });
-    const view = quiz ? toStudentView(quiz, student, new Date()) : null;
+    const view = quiz ? toStudentView(quiz, student, now) : null;
     if (!view) throw new NotFoundException('Quiz not found');
     return view;
   }

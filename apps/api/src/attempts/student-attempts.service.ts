@@ -86,7 +86,11 @@ export class StudentAttemptsService {
 
   // Starts the student's one attempt, or resumes it if it's still running.
   async start(student: AuthUser, quizId: string) {
-    await expireOverdueAttempts(this.prisma, student.id, new Date());
+    await expireOverdueAttempts(
+      this.prisma,
+      { studentId: student.id },
+      new Date(),
+    );
     try {
       return await this.prisma.$transaction(async (tx) => {
         // Shared lock on the quiz row, taken before anything is read: a teacher's edit
@@ -170,7 +174,7 @@ export class StudentAttemptsService {
     // One clock reading for the whole request: an attempt reported as EXPIRED has always
     // been finalized (and scored) by the expiry step just before.
     const now = new Date();
-    await expireOverdueAttempts(this.prisma, student.id, now);
+    await expireOverdueAttempts(this.prisma, { studentId: student.id }, now);
     const attempt = await this.prisma.quizAttempt.findUnique({
       where: { quizId_studentId: { quizId, studentId: student.id } },
       select: ATTEMPT_SELECT,
@@ -185,7 +189,11 @@ export class StudentAttemptsService {
     questionId: string,
     optionId: string,
   ) {
-    await expireOverdueAttempts(this.prisma, student.id, new Date());
+    await expireOverdueAttempts(
+      this.prisma,
+      { studentId: student.id },
+      new Date(),
+    );
     return this.prisma.$transaction(async (tx) => {
       const attemptId = await lockRunningAttempt(tx, student.id, quizId);
       await findQuestionInQuiz(tx, quizId, questionId);
@@ -209,7 +217,11 @@ export class StudentAttemptsService {
   }
 
   async clearAnswer(student: AuthUser, quizId: string, questionId: string) {
-    await expireOverdueAttempts(this.prisma, student.id, new Date());
+    await expireOverdueAttempts(
+      this.prisma,
+      { studentId: student.id },
+      new Date(),
+    );
     return this.prisma.$transaction(async (tx) => {
       const attemptId = await lockRunningAttempt(tx, student.id, quizId);
       await findQuestionInQuiz(tx, quizId, questionId);
@@ -219,7 +231,11 @@ export class StudentAttemptsService {
 
   // Submitting twice is harmless (a double tap, or a retry after a lost response).
   async submit(student: AuthUser, quizId: string) {
-    await expireOverdueAttempts(this.prisma, student.id, new Date());
+    await expireOverdueAttempts(
+      this.prisma,
+      { studentId: student.id },
+      new Date(),
+    );
     return this.prisma.$transaction(async (tx) => {
       const attemptId = await lockAttempt(tx, student.id, quizId);
       const now = new Date();
