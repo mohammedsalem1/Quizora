@@ -109,6 +109,28 @@ describe('Authentication & roles (e2e)', () => {
       expect(res.text).not.toContain('$2'); // no bcrypt hash anywhere in the body
     });
 
+    it('issues an HS256 token that lasts 12 hours and carries only the user id', async () => {
+      const res = await login({
+        username: 'student1',
+        password: PASSWORD,
+      }).expect(200);
+      const token = (res.body as { accessToken: string }).accessToken;
+      const decoded = jwt.decode<{
+        header: { alg: string };
+        payload: Record<string, number | string>;
+      }>(token, { complete: true });
+      expect(decoded.header.alg).toBe('HS256');
+      expect(Object.keys(decoded.payload).sort()).toEqual([
+        'exp',
+        'iat',
+        'sub',
+      ]);
+      expect(decoded.payload.sub).toBe(studentId);
+      expect(Number(decoded.payload.exp) - Number(decoded.payload.iat)).toBe(
+        12 * 60 * 60,
+      );
+    });
+
     it('ignores username case and surrounding spaces', async () => {
       await login({ username: '  Student1 ', password: PASSWORD }).expect(200);
     });
@@ -197,6 +219,11 @@ describe('Authentication & roles (e2e)', () => {
     it('rejects an unsigned ("alg: none") token', async () => {
       const unsigned = `${base64url({ alg: 'none', typ: 'JWT' })}.${base64url({ sub: teacherId })}.`;
       await getWithToken('/auth/me', unsigned).expect(401);
+    });
+
+    it('rejects a token signed with another algorithm, even with the right secret', async () => {
+      const hs512 = jwt.sign({ sub: teacherId }, { algorithm: 'HS512' });
+      await getWithToken('/auth/me', hs512).expect(401);
     });
 
     it('rejects an expired token', async () => {

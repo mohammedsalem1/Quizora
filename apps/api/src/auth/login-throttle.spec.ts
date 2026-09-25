@@ -59,4 +59,14 @@ describe('LoginThrottle', () => {
     expect(throttle.retryAfterMs('no-such-user')).toBeGreaterThan(0);
     expect(throttle.retryAfterMs('s10a01')).toBe(0);
   });
+
+  it('prunes old entries once it tracks too many usernames, keeping recent ones', () => {
+    fail('old-user', 7);
+    clock += 16 * 60_000; // older than 15 minutes
+    for (let i = 0; i < 10_000; i++) throttle.recordFailure(`user-${i}`);
+    fail('recent-user', 7);
+    // The size limit triggered a clean-up: the old entry is gone, the recent one kept.
+    expect(throttle.retryAfterMs('old-user')).toBe(0);
+    expect(throttle.retryAfterMs('recent-user')).toBeGreaterThan(0);
+  });
 });
