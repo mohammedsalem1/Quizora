@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { quizAvailability } from '../quizzes/availability';
 import { attemptDeadline, effectiveStatus } from './attempt-rules';
 import { expireOverdueAttempts } from './expire-overdue';
+import { finalizeAttempt } from './finalize';
 
 type Db = Prisma.TransactionClient; // PrismaService or an interactive transaction
 
@@ -20,6 +21,8 @@ const ATTEMPT_SELECT = {
   startedAt: true,
   expiresAt: true,
   submittedAt: true,
+  score: true,
+  maxScore: true,
   quiz: {
     select: {
       id: true,
@@ -48,8 +51,9 @@ type AttemptRow = Prisma.QuizAttemptGetPayload<{
   select: typeof ATTEMPT_SELECT;
 }>;
 
-// Questions and saved answers are only included while the attempt is running. The score
-// stays null until scoring exists (Phase 9).
+// Questions and saved answers are only included while the attempt is running. The score is
+// there once it has ended (it is computed when it ends; see finalize.ts). It's null for an
+// attempt that ended before scoring existed.
 function toView(attempt: AttemptRow, now: Date) {
   const status = effectiveStatus(attempt, now);
   const { questions } = attempt.quiz;
@@ -69,7 +73,8 @@ function toView(attempt: AttemptRow, now: Date) {
       totalPoints: questions.reduce((sum, q) => sum + q.points, 0),
     },
     answeredCount: attempt.answers.length,
-    score: null,
+    score: attempt.score === null ? null : attempt.score.toNumber(),
+    maxScore: attempt.maxScore,
   };
   if (status !== 'IN_PROGRESS') return view;
   return { ...view, questions, answers: attempt.answers };
@@ -162,13 +167,16 @@ export class StudentAttemptsService {
   }
 
   async get(student: AuthUser, quizId: string) {
-    await expireOverdueAttempts(this.prisma, student.id, new Date());
+    // One clock reading for the whole request: an attempt reported as EXPIRED has always
+    // been finalized (and scored) by the expiry step just before.
+    const now = new Date();
+    await expireOverdueAttempts(this.prisma, student.id, now);
     const attempt = await this.prisma.quizAttempt.findUnique({
       where: { quizId_studentId: { quizId, studentId: student.id } },
       select: ATTEMPT_SELECT,
     });
     if (!attempt) throw new NotFoundException('Attempt not found');
-    return toView(attempt, new Date());
+    return toView(attempt, now);
   }
 
   async saveAnswer(
@@ -222,10 +230,7 @@ export class StudentAttemptsService {
       const status = effectiveStatus(attempt, now);
       if (status === 'EXPIRED') throw new ConflictException(TIME_IS_UP);
       if (status === 'IN_PROGRESS') {
-        await tx.quizAttempt.update({
-          where: { id: attemptId },
-          data: { status: 'SUBMITTED', submittedAt: now },
-        });
+        await finalizeAttempt(tx, attemptId, 'SUBMITTED', now);
       }
       return loadView(tx, attemptId, now);
     });

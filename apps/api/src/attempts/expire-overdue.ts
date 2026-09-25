@@ -1,20 +1,30 @@
-import type { Prisma } from '../generated/prisma/client';
+import type { PrismaService } from '../prisma/prisma.service';
+import { finalizeAttempt } from './finalize';
 
-// Writes EXPIRED onto this student's attempts whose time is up. There's no background job
+// Ends and scores this student's attempts whose time is up. There's no background job
 // (decided in Phase 2): an attempt is finalized when the server next handles a request from
 // its student. Every student request about quizzes or attempts calls this first, with the
 // API server's clock.
 //
-// It's one conditional UPDATE, so it's safe next to a submit happening at the same moment:
-// both need the row lock, and Postgres re-checks `status = IN_PROGRESS` after waiting for it,
-// so a submitted attempt is never turned into an expired one.
+// Each attempt is finalized in its own transaction under its row lock, after checking it is
+// still running: a submit that got the lock first has already ended it, and a submitted
+// attempt is never turned into an expired one.
 export async function expireOverdueAttempts(
-  db: Prisma.TransactionClient,
+  prisma: PrismaService,
   studentId: string,
   now: Date,
 ) {
-  await db.quizAttempt.updateMany({
+  const overdue = await prisma.quizAttempt.findMany({
     where: { studentId, status: 'IN_PROGRESS', expiresAt: { lte: now } },
-    data: { status: 'EXPIRED' },
+    select: { id: true },
   });
+
+  for (const { id } of overdue) {
+    await prisma.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw<{ status: string }[]>`
+        SELECT status FROM "QuizAttempt" WHERE id = ${id} FOR UPDATE`;
+      if (row?.status !== 'IN_PROGRESS') return;
+      await finalizeAttempt(tx, id, 'EXPIRED', now);
+    });
+  }
 }
