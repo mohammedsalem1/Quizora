@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { getCurrentUser } from "@/lib/session";
+
+export const metadata: Metadata = { title: "اختباراتي" };
 
 export default async function StudentLayout({
   children,

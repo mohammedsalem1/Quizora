@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { ClassNames } from "@/components/ClassNames";
 import { Alert, Badge, Button } from "@/components/ui";
 import { ApiError, apiFetch, errorMessagesOf } from "@/lib/api";
 import { countLabel, POINTS } from "@/lib/arabic";
@@ -83,7 +84,7 @@ export default function QuizResultsPage() {
         </h1>
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
           <span>
-            الصفوف: <bdi>{quiz.classes.map((c) => c.name).join("، ")}</bdi>
+            الصفوف: <ClassNames classes={quiz.classes} />
           </span>
           <span>المجموع {countLabel(quiz.maxScore, POINTS)}</span>
           <span>
@@ -118,7 +119,7 @@ export default function QuizResultsPage() {
         summary.average !== null &&
         summary.highest !== null &&
         summary.lowest !== null ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-1 min-[360px]:grid-cols-[auto_1fr] min-[360px]:gap-y-2">
             <Fact label="المتوسط">
               <bdi>{formatPoints(summary.average)}</bdi> من{" "}
               <bdi>{formatPoints(quiz.maxScore)}</bdi>
@@ -132,7 +133,9 @@ export default function QuizResultsPage() {
           </dl>
         ) : (
           <p className="text-ink-muted">
-            لا توجد علامات بعد: لم يُنهِ أحد الاختبار.
+            {summary.submitted + summary.expired > 0
+              ? "لم تُحسب علامات المحاولات المنتهية."
+              : "لا توجد علامات بعد: لم يُنهِ أحد الاختبار."}
           </p>
         )}
       </Section>
@@ -142,12 +145,10 @@ export default function QuizResultsPage() {
           من إجابات الطلاب الذين أنهوا الاختبار فقط.
         </p>
         <ol className="flex flex-col divide-y divide-line">
-          {questions.map((q) => (
+          {questions.map((q, i) => (
             <li key={q.id} className="flex flex-col gap-2 py-3">
               <span className="flex items-baseline justify-between gap-3 text-sm text-ink-muted">
-                <span className="font-medium text-ink">
-                  السؤال {q.position}
-                </span>
+                <span className="font-medium text-ink">السؤال {i + 1}</span>
                 <span>{countLabel(q.points, POINTS)}</span>
               </span>
               <span dir="auto" className="line-clamp-2 leading-7">
@@ -200,7 +201,11 @@ export default function QuizResultsPage() {
                   <Badge tone={STATUS_TONES[s.status]}>
                     {STATUS_LABELS[s.status]}
                   </Badge>
-                  <StudentScore student={s} maxScore={quiz.maxScore} />
+                  <StudentScore
+                    student={s}
+                    maxScore={quiz.maxScore}
+                    questionCount={quiz.questionCount}
+                  />
                 </span>
               </li>
             ))}
@@ -214,9 +219,11 @@ export default function QuizResultsPage() {
 function StudentScore({
   student,
   maxScore,
+  questionCount,
 }: {
   student: QuizResults["students"][number];
   maxScore: number;
+  questionCount: number;
 }) {
   if (student.score !== null) {
     return (
@@ -232,7 +239,7 @@ function StudentScore({
   if (student.status === "IN_PROGRESS") {
     return (
       <span className="text-sm text-ink-muted">
-        أجاب عن <bdi>{student.answeredCount}</bdi>
+        أجاب عن <bdi>{student.answeredCount}</bdi> من <bdi>{questionCount}</bdi>
       </span>
     );
   }
@@ -268,7 +275,7 @@ function Page({ quizId, children }: { quizId: string; children: ReactNode }) {
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
       <Link
         href={`/teacher/quizzes/${quizId}`}
-        className="self-start rounded-lg py-2 text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+        className="inline-flex min-h-11 items-center self-start rounded-lg text-sm font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-accent"
       >
         العودة إلى الاختبار
       </Link>
@@ -299,7 +306,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-ink-muted">{label}</dt>
-      <dd>{children}</dd>
+      <dd className="max-[359px]:mb-2">{children}</dd>
     </>
   );
 }

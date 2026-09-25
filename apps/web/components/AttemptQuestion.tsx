@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { countLabel, POINTS } from "@/lib/arabic";
 import type { AttemptQuestion as Question } from "@/lib/types";
 import type { SaveState } from "@/lib/useAnswerSync";
@@ -22,6 +23,7 @@ export function AttemptQuestion({
   disabled: boolean;
   onChoose: (optionId: string | null) => void;
 }) {
+  const options = useRef<HTMLDivElement>(null);
   const textId = `question-${question.id}`;
 
   return (
@@ -42,6 +44,7 @@ export function AttemptQuestion({
       </p>
 
       <div
+        ref={options}
         role="radiogroup"
         aria-labelledby={textId}
         className="flex flex-col gap-2"
@@ -91,7 +94,11 @@ export function AttemptQuestion({
             variant="quiet"
             size="compact"
             className="shrink-0 whitespace-nowrap"
-            onClick={() => onChoose(null)}
+            onClick={() => {
+              onChoose(null);
+              // This button disappears once the answer is cleared: keep focus on the question.
+              options.current?.querySelector("input")?.focus();
+            }}
           >
             مسح الإجابة
           </Button>

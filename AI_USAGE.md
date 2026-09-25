@@ -423,3 +423,46 @@ Honest account of how AI tools were used on this project. Updated as work progre
       brief requires scores to be shown.
 - **Final checks:** the full suite was run once: 44 unit and 169 e2e tests. Lint, type-check
   and the web build were clean.
+
+## Phase 11 — Arabic & mobile UX
+
+- **How it was done.** The human asked for Phase 11 to follow Phase 10 without stopping in
+  between, so it sits on a branch stacked on Phase 10.
+  - Two read-only agents audited the web code: one for accessibility and forms, one for
+    RTL, Arabic typography and phone layout.
+  - A scratch script drove headless Edge through every screen at 375px and 320px, with
+    realistic data: a class that had taken the quiz. It ran against the AI's own servers on
+    ports 3100/3101 and the test database.
+- **What was fixed.** The AI classified the audit's findings itself. It fixed the ones the
+  Phase 11 brief names: accessible buttons and forms, clear validation, clear timer, RTL,
+  responsive layout and Arabic text (see `DECISIONS.md`):
+  - page titles
+  - focus handling
+  - errors read out with their fields
+  - contrast
+  - overflow at 320px
+  - class-list order in RTL
+  - Arabic plurals
+  - the timer warning
+  - numbering and wording on the results page
+  - the three items deferred to this phase: back-link size, stating the zero floor up front,
+    and the results-page wording
+
+  It left two OPTIONAL items: the English screen-reader voice for English content, and focus
+  handling in the teacher editor.
+- **A regression the AI caused and caught.** The global `overflow-wrap: anywhere` rule fixed
+  long words, but it also let cramped header items break mid-word: "Quizor/a" and "خرو/ج"
+  appeared in the 320px screenshots. The logo and the logout button now never shrink,
+  buttons never break inside a word, and below 360px the header shows only the logo's
+  bubbles. The re-run showed the header intact.
+- **Checks:**
+  - Two screenshot runs, with every screen at both widths: no horizontal overflow and no
+    console errors.
+  - One full test run: 44 unit and 169 e2e tests, all passing. The API didn't change in this
+    phase.
+  - Lint, type-check and `next build`.
+- **Environment note.** The session was interrupted mid-phase. Afterwards, neither the
+  human's dev servers nor Docker Desktop was running. The AI's stop command only matched its
+  own servers' command lines. The AI started Docker Desktop and the project's Postgres
+  container, as the README does, to run the test suite. It didn't restart the human's dev
+  servers.

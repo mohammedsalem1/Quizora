@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
+import { flushSync } from "react-dom";
 import { errorMessagesOf } from "@/lib/api";
 import type { Question } from "@/lib/types";
 import {
@@ -104,7 +105,8 @@ export function QuestionForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const { found, focusId } = validate();
-    setErrors(found);
+    // Render the errors first, so the field is announced with its error once it has focus.
+    flushSync(() => setErrors(found));
     setServerErrors(null);
     if (focusId) {
       document.getElementById(focusId)?.focus();
@@ -191,7 +193,7 @@ export function QuestionForm({
               maxLength={500}
               aria-label={`نص الخيار ${OPTION_LETTERS[i]}`}
               aria-invalid={!!errors.options && !option.trim()}
-              className={inputClass}
+              className={`${inputClass} min-w-0 flex-1`}
               value={option}
               onChange={(e) => setOption(i, e.target.value)}
             />

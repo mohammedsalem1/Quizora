@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/LoginForm";
 import { Logo } from "@/components/ui";
 import { getCurrentUser } from "@/lib/session";
+
+export const metadata: Metadata = { title: "تسجيل الدخول" };
 
 // Only same-site paths, so a crafted ?from= link can't send users to another website.
 function safeReturnPath(from: string | string[] | undefined) {

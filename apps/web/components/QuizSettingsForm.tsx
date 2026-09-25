@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
+import { flushSync } from "react-dom";
 import { errorMessagesOf } from "@/lib/api";
 import { fromDateTimeLocal, toDateTimeLocal } from "@/lib/dates";
 import type { ClassRef, QuizDetail } from "@/lib/types";
@@ -115,7 +116,8 @@ export function QuizSettingsForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const found = validate();
-    setErrors(found);
+    // Render the errors first, so the field is announced with its error once it has focus.
+    flushSync(() => setErrors(found));
     setServerErrors(null);
     const firstInvalid = FIELD_ORDER.find((name) => found[name]);
     if (firstInvalid) {
@@ -297,7 +299,7 @@ export function QuizSettingsForm({
                   checked={checked}
                   onChange={() => toggleClass(c.id)}
                 />
-                <span dir="ltr">{c.name}</span>
+                <bdi>{c.name}</bdi>
               </label>
             );
           })}

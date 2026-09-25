@@ -28,4 +28,6 @@ html {
 body {
   background: var(--color-paper);
   color: var(--color-ink);
+  /* A long unbroken word (a URL, a formula) wraps instead of widening the page on a phone. */
+  overflow-wrap: anywhere;
 }
