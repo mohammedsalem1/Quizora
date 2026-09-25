@@ -34,7 +34,9 @@ export function LoginForm({ returnTo }: { returnTo: string }) {
       setError(
         res.status === 401
           ? "اسم المستخدم أو كلمة المرور غير صحيحة."
-          : "تعذّر تسجيل الدخول الآن. حاول مرة أخرى بعد قليل.",
+          : res.status === 429
+            ? "محاولات دخول كثيرة لهذا الحساب. انتظر نصف دقيقة ثم حاول مرة أخرى."
+            : "تعذّر تسجيل الدخول الآن. حاول مرة أخرى بعد قليل.",
       );
     } catch {
       setError("تعذّر الاتصال بالخادم. تحقّق من اتصالك بالإنترنت.");
@@ -43,7 +45,14 @@ export function LoginForm({ returnTo }: { returnTo: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
+    // method="post": if the form is sent before the page's JavaScript has loaded, the browser
+    // must not put the password in the URL (history, server logs).
+    <form
+      method="post"
+      onSubmit={onSubmit}
+      className="flex flex-col gap-5"
+      noValidate
+    >
       <Field label="اسم المستخدم" htmlFor="username">
         <input
           id="username"
