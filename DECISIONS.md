@@ -526,6 +526,53 @@ The rules were agreed in Phase 2. The code is `scoreAttempt()` in
 - **Phase 10:** teacher-side results and statistics. Those need the same expiry step for a
   whole quiz before reading scores, as noted in Phase 8.
 
+## Phase 10 — Results & teacher dashboard
+
+### API
+
+| Route | Who | Purpose |
+|---|---|---|
+| `GET /teacher/quizzes/:id/results` | The teacher who owns the quiz | Every student the quiz is for, their status and score, plus basic statistics |
+| `GET /student/quizzes` and `/:id` (Phase 6) | Students | Now also include the student's own `score` and `maxScore` once they have finished |
+
+### Decisions
+
+- **Only the owner sees a quiz's results.** Another teacher gets 404 (as in Phase 5), a
+  student gets 403, and ownership is checked before anything else runs.
+- **Results are complete when the teacher opens them.** The route first ends and scores any
+  of the quiz's attempts whose time is up. This closes the gap from Phases 8–9: a student
+  who never came back used to keep an unscored attempt.
+- **Who is listed:**
+  - Every student in the quiz's classes, including those who haven't started.
+  - Anyone who started before the teacher removed their class, since their attempt still
+    counts (the Phase 6 rule).
+  - Students of other classes are never listed.
+- **"Student performance" means each student's result in each of the teacher's quizzes:**
+  - their status (not started, in progress, submitted, time up)
+  - their score out of the maximum
+  - how many questions they answered
+  - when they finished
+
+  There are no cross-quiz reports or charts, since the brief asks for basic statistics and
+  "no unnecessary analytics".
+- **The statistics shown:**
+  - how many students are in each status
+  - the average, highest and lowest score, over finished attempts that have a score
+  - for each question, how many finished attempts got it right, got it wrong, or left it
+    blank. Attempts still in progress don't count yet.
+
+  Only the average is rounded, to the nearest hundredth. The rest are exact.
+- **Teachers see totals, not individual answers.** The response never includes option
+  choices, correct answers or `pointsAwarded`.
+- **Students see only their own score, and only once they've finished.** It appears in their
+  quiz list, on the quiz page and on the result page. Classmates' scores are never included.
+
+### Deliberately left out
+
+- **Per-student answer review for teachers** (which option each student picked). Nobody
+  asked for it, and it would be a small addition.
+- **Exports, charts and trends across quizzes**, per "no unnecessary analytics".
+
 ## Between Phases 5 and 6 — Web frontend for the current API
 
 Built before Phase 6 at the user's request, so everything the API supports can be tested
