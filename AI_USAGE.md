@@ -554,3 +554,44 @@ Honest account of how AI tools were used on this project. Updated as work progre
     found no other file with raw NUL bytes.
 - **Checks:** one full run of `npm test`: 55 API unit, 201 API e2e and 15 web tests, 271 in
   all, all passing. Lint, type-check and `next build` were clean.
+
+## Phase 14 — Seed & demo
+
+- **Process.**
+  - The human asked to start the phase. The brief asks for sample accounts, classes,
+    quizzes, questions and Arabic content that "represents realistic use", with no real
+    personal data.
+  - The AI wrote the plan and chose the demo's shape:
+    - the brief's real size
+    - a quiz in every state
+    - a 2-minute quiz for testing the timer
+    - past results on the closed quizzes only
+  - The AI rewrote `apps/api/prisma/seed.ts`. It didn't change any application code.
+- **Content.**
+  - The AI wrote all the names and questions. Every name is invented from lists of common
+    first and family names.
+  - The answer key of each new question (maths, physics, Arabic spelling, English
+    vocabulary) was worked through during writing. The Arabic questions avoid spellings that
+    have two accepted forms.
+- **Checks.** The seed ran against a separate scratch database, so the development data was
+  never wiped.
+  - SQL queries recomputed every score independently, and checked dates, names and counts.
+  - A temporary API on another port was called as students and teachers.
+  - The details are in `DECISIONS.md` (Phase 14, "How it was checked").
+- **Review.** Two read-only review agents checked the work.
+  - **The seed's logic:** the CHECK constraints at any run time or timezone, determinism,
+    the fixed demo accounts, and anything depending on the old data. It found nothing to fix.
+  - **The content and docs:** every answer key worked out independently (all 35 correct),
+    Arabic language, and every claim in the docs checked against the code.
+  - **Fixed from their findings:**
+    - The DECISIONS average was described as "across 200 students"; it covers the 185
+      finished attempts.
+    - The docs said the open quizzes are "always open", when that holds only for a few days
+      after seeding.
+    - A maths question's options written as `(2, 3)` could be read in the wrong order next
+      to a right-to-left equation. They're now written out as `س = 2، ص = 3`.
+    - Two wording slips in DECISIONS.
+  - **Left as optional:** phrasing polish on a few Arabic questions.
+- **Checks after the fixes:** the seed and the SQL checks ran again with the same result.
+  One full `npm test` run: 55 API unit, 201 API e2e and 15 web tests, 271 in all, all
+  passing. The suite doesn't use the seed, so the later seed and doc fixes can't affect it.
