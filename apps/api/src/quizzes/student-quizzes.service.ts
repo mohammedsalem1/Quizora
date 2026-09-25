@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../auth/auth-user';
 import { Prisma } from '../generated/prisma/client';
+import { expireOverdueAttempts } from '../attempts/expire-overdue';
 import { PrismaService } from '../prisma/prisma.service';
 import { quizAvailability } from './availability';
 
@@ -73,6 +74,7 @@ export class StudentQuizzesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(student: AuthUser) {
+    await expireOverdueAttempts(this.prisma, student.id, new Date());
     const quizzes = await this.prisma.quiz.findMany({
       where: candidatesFor(student),
       orderBy: { opensAt: 'desc' },
@@ -86,6 +88,7 @@ export class StudentQuizzesService {
 
   // A draft, another class's quiz and a nonexistent id all look the same: 404.
   async get(student: AuthUser, quizId: string) {
+    await expireOverdueAttempts(this.prisma, student.id, new Date());
     const quiz = await this.prisma.quiz.findFirst({
       where: { id: quizId, ...candidatesFor(student) },
       select: selectFor(student),

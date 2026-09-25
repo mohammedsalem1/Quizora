@@ -104,19 +104,26 @@ describe('Student quiz availability (e2e)', () => {
     return quiz.id;
   }
 
+  // An attempt that started 20 minutes before its deadline and, if SUBMITTED, was submitted
+  // a minute after starting (the database checks both are consistent).
   function startAttempt(
     quizId: string,
     studentId: string,
     status: 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED',
     expiresAt: Date,
   ) {
+    const startedAt = new Date(expiresAt.getTime() - 20 * 60 * 1000);
     return prisma.quizAttempt.create({
       data: {
         quizId,
         studentId,
         status,
+        startedAt,
         expiresAt,
-        submittedAt: status === 'SUBMITTED' ? new Date() : null,
+        submittedAt:
+          status === 'SUBMITTED'
+            ? new Date(startedAt.getTime() + 60 * 1000)
+            : null,
       },
     });
   }
