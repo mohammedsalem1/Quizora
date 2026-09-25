@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AttemptsModule } from './attempts/attempts.module';
 import { AuthModule } from './auth/auth.module';
 import { ClassesController } from './classes/classes.controller';
 import { PrismaModule } from './prisma/prisma.module';
@@ -14,6 +15,7 @@ import { QuizzesModule } from './quizzes/quizzes.module';
     PrismaModule,
     AuthModule,
     QuizzesModule,
+    AttemptsModule,
   ],
   controllers: [AppController, ClassesController],
   providers: [
