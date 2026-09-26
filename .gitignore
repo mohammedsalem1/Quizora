@@ -7,10 +7,10 @@ dist/
 out/
 build/
 
-# Env files
+# Env files: every variant (.env.local, .env.production, .env.test, ...); only the
+# .env.example files are committed
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 
 # Logs
@@ -26,8 +26,9 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
-# Claude Code runtime state
+# Claude Code runtime state and personal settings
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
 
 # Prisma
 apps/api/prisma/migrations/dev.db
