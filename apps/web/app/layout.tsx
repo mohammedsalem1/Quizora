@@ -16,10 +16,22 @@ export const metadata: Metadata = {
   description: "اختبارات قصيرة لطلاب المركز",
 };
 
+// suppressHydrationWarning: browser extensions add their own attributes to <html> and <body>
+// before React hydrates (e.g. bbai-tooltip-injected, wotdisconnected), which React reports as
+// a mismatch. It only ignores attribute differences on these two elements; mismatches inside
+// the app's own components are still reported.
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ar" dir="rtl" className={plexArabic.variable}>
-      <body className="min-h-dvh font-sans text-base antialiased">
+    <html
+      lang="ar"
+      dir="rtl"
+      className={plexArabic.variable}
+      suppressHydrationWarning
+    >
+      <body
+        className="min-h-dvh font-sans text-base antialiased"
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>
