@@ -1279,3 +1279,21 @@ found", and a student opening `/teacher` lands on `/student`.
     mean rewriting it, which the brief forbids.
   - The API's one lint warning, on the unawaited `bootstrap()` call in `main.ts`, is from
     Nest's generated starter.
+
+## After Phase 16 — Browser extensions and hydration warnings
+
+- **The problem:** a Next.js "hydration mismatch" error in the human's browser, on every
+  page. Two browser extensions add their own attributes to the page before React takes over:
+  - `bbai-tooltip-injected` on `<html>`
+  - `wotdisconnected` on `<body>`
+
+  React then sees attributes it didn't render. The app itself doesn't cause it: the Phase 16
+  QA, in a browser without extensions, logged no errors.
+- **The fix:** `suppressHydrationWarning` on `<html>` and `<body>` in `app/layout.tsx`, the
+  usual fix for this. It only ignores attribute differences on those two elements. A
+  mismatch inside the app's own markup is still reported.
+- **How it was checked:** a headless browser added the same two attributes before React
+  hydrated, the way the extensions do.
+  - Before the fix it logged the same error.
+  - After the fix: no error, with or without the attributes.
+  - An attribute added inside the page, on `<main>`, is still reported.

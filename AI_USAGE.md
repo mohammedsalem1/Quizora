@@ -882,3 +882,18 @@ trade-offs:
     sections. Checking the page itself showed one heading and 208 rows: the repeats came
     from the screenshot being taller than the browser can capture. Viewport-sized
     screenshots were taken instead.
+
+## After Phase 16 — Hydration warning from browser extensions
+
+- **The report:** the human pasted a hydration error from their browser. The AI traced it to
+  two attributes that browser extensions add to `<html>` and `<body>`.
+- **The fix:** `suppressHydrationWarning` on those two elements only, on its own branch
+  rather than the frozen `master`.
+- **How it was checked:**
+  - First, the AI reproduced the error against the human's running dev server, with a
+    headless browser adding the same attributes before hydration. Its first attempt added
+    them too early, before `<html>` existed, and had to be corrected.
+  - After the fix, the error was gone. An injected attribute inside the page was still
+    reported.
+  - Lint, type-check and the web tests pass. `next build` wasn't run, because it would have
+    overwritten the `.next` folder of the human's running dev server.
