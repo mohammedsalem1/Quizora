@@ -120,7 +120,7 @@ section).
 **How changes reached `master`.**
 - Phase 1's first three commits went straight to `master`.
 - Since then, at the human's request, every change has gone through a pull request on its
-  own branch. Up to Phase 14 that was 15 merged pull requests, numbered #1 to #16 (#12
+  own branch. Up to Phase 15 that was 16 merged pull requests, numbered #1 to #17 (#12
   wasn't merged).
 - The human merged every one. The AI never merged a pull request and never rewrote history.
 
@@ -849,3 +849,36 @@ trade-offs:
 
   The test suite wasn't re-run. The fixes changed only the two scripts, the Postgres health
   check and documentation, and the tests run none of these.
+
+## Phase 16 — Final QA & submission
+
+- **Process.** The AI worked through the brief's 20-step checklist on a fresh clone of
+  `master` from GitHub, following the README exactly. Final QA is on the human's list of
+  high-risk areas, so two read-only review agents ran as well:
+  - an audit of the whole git history for secrets and artifacts
+  - a check of every requirement in the brief against the code, tests and docs
+- **How the flows were tested.** The AI wrote a scratch script that drove headless Edge
+  through the real pages of the clone's `npm run dev`, at 375px and 320px:
+  - a teacher creating, filling and publishing a quiz through the forms
+  - a student taking quizzes, including a refresh mid-quiz
+  - the 2-minute quiz running out in the browser
+  - duplicate and simultaneous starts
+  - four scoring cases worked out by hand beforehand
+  - authorization in the pages
+
+  Every result was also checked against the API and the database: 33 checks, all passing.
+  The AI looked at the screenshots for the Arabic, right-to-left and phone layout.
+- **Also run in the clone:**
+  - `npm test`: 55 API unit, 201 API e2e and 15 web tests
+  - both production builds, lint and type-check
+- **What changed:** only `.gitignore` (every `.env` variant, and Claude Code's personal
+  settings file) and these notes. Neither review found anything that must be fixed. The
+  items left as they are, and why, are in `DECISIONS.md`, Phase 16.
+- **Mistakes caught along the way:**
+  - The first run of the QA script assumed the question form starts with two options. It
+    starts with four, so the script added two blank ones. The app correctly refused the
+    form with an Arabic error, and the script was fixed.
+  - The full-page screenshot of the 200-student results page came out with repeated
+    sections. Checking the page itself showed one heading and 208 rows: the repeats came
+    from the screenshot being taller than the browser can capture. Viewport-sized
+    screenshots were taken instead.

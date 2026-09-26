@@ -192,6 +192,11 @@ names the phase to look under.
   frontend section, Phase 15).
 - **The demo's dates are relative to the day the seed runs,** so the seed should be re-run
   before a demo (Phase 14).
+- **The demo quizzes are short:** 2 to 8 questions, where the brief says a quiz usually has
+  about 15. A reviewer can take one in a few minutes, and the app itself allows up to 100
+  questions. This wasn't a stated choice in Phase 14; the Phase 16 review noticed it.
+- **The teacher results page lists every student on one page.** With 200 students that's a
+  long scroll on a phone. There's no filter or search (Phase 16).
 - **`npm run setup` and `npm run dev` were tested on Windows only.** They use only Node and
   Docker commands, so they should work the same on macOS and Linux, but that wasn't checked
   (Phase 15).
@@ -218,6 +223,7 @@ In order of value to the centre:
    - reordering questions
    - exporting results to a spreadsheet
    - reviewing each student's answers
+   - filtering the results page by class, and searching it by name
 4. **Offline safety for answers:** keep unsent answers in the browser, and send them when
    the connection returns, if the attempt is still running.
 5. **Browser end-to-end tests** (for example Playwright) for the student and teacher flows,
@@ -1190,3 +1196,86 @@ followed first, using 5434.
   - `npm run dev` was run with port 3000 already taken: the web app stopped with "address
     already in use", the API kept 3001, and the script said which app stopped.
   - `npm run dev` then worked normally.
+
+## Phase 16 — Final QA & submission
+
+### How each step of the brief's checklist was checked
+
+A fresh clone of `master` from GitHub, in a scratch folder, was taken through the README
+exactly as written. This machine's port 5432 is taken, so the README's busy-port steps came
+first. The flows ran in headless Edge through the real web pages, on phone-sized screens,
+and every result was checked against the API and the database.
+
+| Brief step | How | Result |
+|---|---|---|
+| 1–2. Clone, follow the README | `git clone` from GitHub, `npm install` | Pass |
+| 3–5. Database, migrations, seed | `npm run setup`: Postgres healthy, 3 migrations applied, demo loaded (251 submitted, 26 expired) | Pass |
+| 6. Start frontend and backend | `npm run dev`: API on 3001, web app on 3000 | Pass |
+| 7. Teacher flow | See the teacher flow below | Pass |
+| 8. Student flow | See the student flow below | Pass |
+| 9. Timer | The 2-minute quiz runs out in the browser. See the timer below. | Pass |
+| 10. Duplicate attempts | A finished quiz offers no second start; starting again gets 409; 6 simultaneous starts make 1 attempt | Pass |
+| 11–12. Scoring and negative marking | See the scoring cases below | Pass |
+| 13. Arabic, right to left | `lang="ar" dir="rtl"`, the Arabic font applied, Arabic errors and dates, English quiz content left to right; screenshots reviewed | Pass |
+| 14. Mobile layout | 43 screenshots at 375px and 320px: no horizontal overflow, no console errors; screenshots reviewed | Pass |
+| 15. Automated tests | `npm test` in the clone: 55 API unit, 201 API e2e, 15 web; also both production builds, lint and type-check | Pass |
+| 16. git status | Clean | Pass |
+| 17. Commit history | 54 commits and 16 PR merges, nothing rewritten, no WIP messages; every non-merge commit names its AI model | Pass |
+| 18. No secrets | A read-only audit of the whole history: no keys, tokens or real secrets, and only `.env.example` files ever committed | Pass; `.gitignore` hardened (below) |
+| 19. No build artifacts or `node_modules` | None tracked, now or ever. Building in the clone left `git status` clean. | Pass |
+| 20. Ready to freeze | See "Left as they are" below | Ready once this phase is merged |
+
+**The teacher flow,** as `teacher.sami`, who had no quizzes:
+1. Create a quiz through the form: 50% negative marking, 10 minutes, class 10A.
+2. Add two questions, one with three options.
+3. Publish it.
+4. A 10A student takes it.
+5. The editor then shows the lock, and editing a question gets 409.
+6. The results page lists all 100 students of 10A, with one submission.
+
+**The student flow,** as `s10a004`:
+1. The quiz list, then the quiz's details, then the start confirmation.
+2. Tap four answers, and check the server saved all four.
+3. Refresh the page: the answers and the deadline stay the same.
+4. The submit confirmation, then the result page.
+
+**The timer.** Start the 2-minute quiz and tap one answer:
+- The countdown turns red in the last minute.
+- At zero the page moves to the result by itself.
+- A late answer and a late submit both get 409.
+- The teacher sees EXPIRED, scored from the saved answer (2).
+
+**The scoring cases,** each checked on the result page, through the API, and in the stored
+per-answer points:
+
+| Quiz | Answers | Expected score |
+|---|---|---|
+| Maths, 25% | +1 −0.25 +2 −0.5, one blank | 2.25 of 9 |
+| The quick quiz, 50% | all wrong | −3, floored to 0 of 6 |
+| The quick quiz, 50% | one right, one wrong | +2 −0.5 = 1.5 |
+| The teacher's new quiz, 50% | one right, one wrong | +2 −2 = 0 |
+
+Authorization, checked in the pages: another teacher opening the quiz's address sees "not
+found", and a student opening `/teacher` lands on `/student`.
+
+### Decisions
+
+- **Two read-only reviews ran:**
+  - an audit of the whole git history for secrets and artifacts
+  - a check of every requirement in the brief against the code, the tests and the docs
+
+  Neither found anything that must be fixed.
+- **`.gitignore` hardened,** from the history audit:
+  - Every `.env` variant, such as `.env.production` or `.env.test`, is now ignored, not just
+    `.env` and `.env.local`. The `.env.example` files stay committed.
+  - Claude Code's personal settings file (`.claude/settings.local.json`) is now ignored by
+    the repository itself. Before, only the author's own global git settings ignored it.
+- **Left as they are:**
+  - `GET /` still returns Nest's default "Hello World!". It serves as the health check, and
+    the README documents it that way.
+  - The web app still has Next.js's default favicon.
+  - Three Python cache files from a skill are still in the history. They were committed in
+    the web frontend pass and removed straight after. Taking them out of the history would
+    mean rewriting it, which the brief forbids.
+  - The API's one lint warning, on the unawaited `bootstrap()` call in `main.ts`, is from
+    Nest's generated starter.
